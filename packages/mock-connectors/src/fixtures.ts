@@ -22,7 +22,8 @@ export const SCENARIO: Scenario = (() => {
 
 const DAY = 24 * 60 * 60 * 1000;
 const iso = (ms: number) => new Date(ms).toISOString();
-const now = Date.now();
+// Evaluated per request, not once at module load, so a long-running mock server
+// keeps its seeded windows/incident ages anchored to "now" rather than startup.
 
 export interface CalendarEvent {
   id: string;
@@ -52,6 +53,7 @@ export interface Incident {
 }
 
 export function calendarEvents(): CalendarEvent[] {
+  const now = Date.now();
   const events: CalendarEvent[] = [
     {
       id: 'evt-standup',
@@ -85,6 +87,7 @@ export function calendarEvents(): CalendarEvent[] {
 }
 
 export function oncalls(): OnCall[] {
+  const now = Date.now();
   return [
     {
       escalation_policy: 'Payments — Primary',
@@ -97,6 +100,7 @@ export function oncalls(): OnCall[] {
 }
 
 export function incidents(): Incident[] {
+  const now = Date.now();
   if (SCENARIO !== 'incident') {
     return [
       {

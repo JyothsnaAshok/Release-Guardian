@@ -30,8 +30,9 @@ Steps, in order:
    - false otherwise.
    - "unknown" for a field only if its lookup errored — never false on error.
 6. Call guardian-actions.save_check_result with kind "freeze" and result:
-   { in_freeze, reasons: [..], window: {start,end}|null, conflicting_deploys: [], oncall: {name,email}|null }
-   Put any field you could not determine in unknown_fields.
+   { in_freeze, reasons: [..], window: {start,end}|null, conflicting_deploys: [..], oncall: {name,email}|null }
+   All five fields are required. For any field whose lookup errored, set it to null
+   (arrays included) and name it in unknown_fields.
 7. Reply with the final JSON you saved.`;
 
 const { data: session } = await client.sessions.create({

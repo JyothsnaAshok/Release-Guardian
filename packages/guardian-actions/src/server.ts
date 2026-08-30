@@ -102,8 +102,12 @@ function buildServer(): McpServer {
       if (value === undefined) {
         return ok({ saved: false, error: `"${headline}" is required (use "unknown" if a lookup failed)` });
       }
-      const declaredUnknown =
-        value === 'unknown' ? [...new Set([...unknown_fields, headline])] : unknown_fields;
+      // Any field the caller left as "unknown" is declared unknown whether or not
+      // they remembered to list it — a failed lookup can never read as determined.
+      const unknownValued = Object.entries(parsed.data as Record<string, unknown>)
+        .filter(([, v]) => v === 'unknown')
+        .map(([k]) => k);
+      const declaredUnknown = [...new Set([...unknown_fields, ...unknownValued])];
       return guarded(() => {
         store.saveCheckResult({ candidate_id, kind, result: parsed.data, unknown_fields: declaredUnknown });
         return ok({ saved: true, kind, headline: { [headline]: value }, unknown_fields: declaredUnknown });

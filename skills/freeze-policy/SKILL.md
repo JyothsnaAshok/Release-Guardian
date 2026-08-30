@@ -47,11 +47,15 @@ so this is calendar-only for now.
 }
 ```
 
+- Every field above is **required** — always send all five. There are no defaults; an
+  omitted field is rejected.
 - `in_freeze` is `true`, `false`, or the string `"unknown"` — use `"unknown"` only when
   a required lookup failed. **Never report `false` because a tool call errored.**
-- Put every field you could not determine into the `unknown_fields` array of the
-  `save_check_result` call (e.g. `["oncall"]`), and set the value to `null`.
+- For any field you could not determine, set its value to `null` (this includes the
+  array fields `reasons` and `conflicting_deploys`) and name it in the `unknown_fields`
+  array of the `save_check_result` call (e.g. `["oncall"]`).
 - `window` is `null` when `in_freeze` is `false`.
-- `reasons` is `[]` when `in_freeze` is `false`; otherwise one human-readable string per
-  triggered rule, prefixed with the rule name (`calendar_freeze`, `incident_freeze`,
-  `weekend_freeze`).
+- `reasons` / `conflicting_deploys` are `[]` when the lookup succeeded and found nothing,
+  and `null` (plus listed in `unknown_fields`) when the lookup failed. When `in_freeze`
+  is `true`, `reasons` has one human-readable string per triggered rule, prefixed with
+  the rule name (`calendar_freeze`, `incident_freeze`, `weekend_freeze`).

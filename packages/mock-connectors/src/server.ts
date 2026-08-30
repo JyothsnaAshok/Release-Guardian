@@ -14,6 +14,9 @@ import { SCENARIO, calendarEvents, oncalls, incidents } from './fixtures.js';
  */
 
 const PORT = Number(process.env.MOCK_PORT ?? 9200);
+// Loopback by default, like guardian-actions — this server is unauthenticated.
+// Override with MOCK_HOST=0.0.0.0 only where a non-local bind is actually needed.
+const HOST = process.env.MOCK_HOST ?? '127.0.0.1';
 const ok = (data: unknown) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
 });
@@ -98,6 +101,6 @@ app.post('/mcp', async (req, res) => {
   await transport.handleRequest(req, res, req.body);
 });
 
-app.listen(PORT, () => {
-  console.log(`mock-connectors MCP on http://localhost:${PORT}/mcp  (scenario: ${SCENARIO})`);
+app.listen(PORT, HOST, () => {
+  console.log(`mock-connectors MCP on http://${HOST}:${PORT}/mcp  (scenario: ${SCENARIO})`);
 });
