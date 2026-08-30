@@ -23,6 +23,7 @@ const {
   MODEL_MAX_OUTPUT = '64000',
   DAYTONA_API_KEY,
   GUARDIAN_MCP_URL = 'http://localhost:9100/mcp',
+  MOCK_MCP_URL = 'http://localhost:9200/mcp',
 
   // Optional extra OpenAI-compatible "custom" provider (e.g. Cerebras).
   CUSTOM_PROVIDER_NAME = 'cerebras',
@@ -133,6 +134,17 @@ await step(`mcp server "guardian-actions" -> ${GUARDIAN_MCP_URL}`, () =>
   }),
 );
 
+await step(`mcp server "mock-connectors" -> ${MOCK_MCP_URL}`, () =>
+  client.settings.mcpServers.createOrUpdate({
+    manifest: {
+      type: 'remote',
+      name: 'mock-connectors',
+      url: MOCK_MCP_URL,
+      description: 'Mock Calendar + PagerDuty connectors (freeze windows, on-call, incidents) while the real OAuth servers are not wired.',
+    },
+  }),
+);
+
 if (failures.length > 0) {
   console.error(`\nFAILED: ${failures.length} step(s) did not complete:`);
   for (const label of failures) console.error(`  - ${label}`);
@@ -140,5 +152,5 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log('\ndone. OAuth connectors (GitHub, PagerDuty, Google Calendar) must still be');
-console.log('added in Settings -> Connectors — they need an interactive auth flow.');
+console.log('\ndone. Real OAuth connectors (GitHub, PagerDuty, Google Calendar) can replace');
+console.log('the mocks later via Settings -> Connectors — the agent config does not change.');

@@ -9,8 +9,11 @@
   "scripts": {
     "guardian:dev": "npm --workspace packages/guardian-actions run dev",
     "guardian:start": "npm --workspace packages/guardian-actions run start",
+    "mocks:dev": "npm --workspace packages/mock-connectors run dev",
+    "mocks:start": "npm --workspace packages/mock-connectors run start",
     "setup:providers": "node --env-file=.env scripts/setup-providers.mjs",
     "agent:apply": "node --env-file=.env scripts/apply-agent.mjs",
+    "smoke:freeze": "node --env-file=.env scripts/smoke-freeze.mjs",
     "typecheck": "tsc -b --pretty"
   },
   "dependencies": {

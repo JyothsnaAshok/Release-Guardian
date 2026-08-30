@@ -34,10 +34,25 @@ Given a release candidate (branch / tag / PR ref), Release Guardian:
 ```
 agents/release-guardian.json    Agent spec, applied to TrueForge via the SDK
 packages/guardian-actions/      Custom MCP server: the two approval gates + app store
+packages/mock-connectors/       Mock Calendar + PagerDuty (freeze windows, on-call, incidents)
 scripts/apply-agent.mjs         Create/update the agent on a running server
+scripts/setup-providers.mjs     Configure model providers / Daytona / MCP servers via the SDK
+scripts/smoke-freeze.mjs        End-to-end check of the Freeze Check
 fixtures/sample-repo/           Demo repo incl. a deliberately-irreversible migration
 ui/                             Custom UI on the TrueForge UI SDK (level 2)
 ```
+
+## Mock connectors
+
+`packages/mock-connectors` stands in for Google Calendar + PagerDuty until the real
+OAuth servers are wired (they mirror the real API shapes, so swapping is a connector
+config change, not an agent change). `MOCK_SCENARIO` selects the world:
+
+| Scenario | Meaning |
+| --- | --- |
+| `clear` | no freeze window, no blocking incident |
+| `freeze` | an active `FREEZE:` calendar window |
+| `incident` | a triggered high-urgency PagerDuty incident |
 
 ## Quick start
 
