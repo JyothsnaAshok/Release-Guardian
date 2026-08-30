@@ -13,6 +13,8 @@
     "mocks:start": "npm --workspace packages/mock-connectors run start",
     "setup:providers": "node --env-file=.env scripts/setup-providers.mjs",
     "agent:apply": "node --env-file=.env scripts/apply-agent.mjs",
+    "agent:haiku": "node --env-file=.env scripts/apply-agent.mjs anthropic/claude-haiku-4-5",
+    "agent:sonnet": "node --env-file=.env scripts/apply-agent.mjs anthropic/claude-sonnet-4-6",
     "smoke:freeze": "node --env-file=.env scripts/smoke-freeze.mjs",
     "smoke:readiness": "node --env-file=.env scripts/smoke-readiness.mjs",
     "smoke:rollback": "node --env-file=.env scripts/smoke-rollback.mjs",
