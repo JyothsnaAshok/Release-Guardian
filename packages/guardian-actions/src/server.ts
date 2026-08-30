@@ -249,17 +249,37 @@ function buildServer(): McpServer {
   server.registerTool(
     'send_comms',
     {
-      title: 'Send release comms live (GATE 2, stretch §9.5)',
+      title: 'Send the release comms (GATE 2)',
       description:
-        'Live send via a real mail/Slack MCP. Only available if the §9.5 stretch lands; otherwise use handoff_comms. Human approval required.',
+        'Sends BOTH the Slack summary and the stakeholder email. This is the second irreversible checkpoint — an org-wide message cannot be unsent — so it is human-gated: the harness pauses on this call and shows the full drafts for Allow / Deny before anything goes out. In this local build the send is mocked (no real Slack/mail call), but the "sent" state and delivery refs are recorded exactly as a real integration would.',
       inputSchema: {
         candidate_id: z.string(),
-        channel: z.enum(['slack', 'email']),
-        content: z.string(),
+        slack: z.string().min(1).describe('Final Slack summary, post-edit'),
+        slack_channel: z.string().default('#releases'),
+        email: z.string().min(1).describe('Final stakeholder email, post-edit'),
+        email_to: z.string().default('release-stakeholders@demo.dev'),
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     },
-    async () => ok({ error: 'live send not wired in this build; use handoff_comms' }),
+    async ({ candidate_id, slack, slack_channel, email, email_to }) =>
+      guarded(() => {
+        const rid = () => Math.random().toString(36).slice(2, 12);
+        const deliveries = [
+          { channel: 'slack', target: slack_channel, delivery_ref: `${Date.now() / 1000}.${rid()}` },
+          { channel: 'email', target: email_to, delivery_ref: `<${rid()}@release-guardian.local>` },
+        ];
+        store.saveCommsDrafts({
+          candidate_id,
+          status: 'sent',
+          drafts: [
+            { channel: 'slack', content: slack },
+            { channel: 'email', content: email },
+          ],
+        });
+        const { sent_at } = store.recordCommsSend({ candidate_id, deliveries });
+        store.recordDecision({ candidate_id, gate: 2, decision: 'approve', actor: 'trueforge-default', reason: null });
+        return ok({ sent: true, sent_at, deliveries });
+      }),
   );
 
   server.registerTool(

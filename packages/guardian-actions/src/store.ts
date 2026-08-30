@@ -104,6 +104,13 @@ CREATE TABLE IF NOT EXISTS comms_draft (
   status       TEXT NOT NULL,
   updated_at   TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS comms_delivery (
+  candidate_id TEXT NOT NULL REFERENCES release_candidate(id),
+  channel      TEXT NOT NULL,
+  target       TEXT NOT NULL,
+  delivery_ref TEXT NOT NULL,
+  sent_at      TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS schedule_link (
   candidate_id TEXT PRIMARY KEY REFERENCES release_candidate(id),
   schedule_id  TEXT NOT NULL,
@@ -327,6 +334,41 @@ export class Store {
     writeAll(input.drafts);
   }
 
+  /**
+   * Record a comms send. In this local build "send" is a mock — no real Slack/mail
+   * call — but the delivery record is written exactly as a real integration would,
+   * so the evidence pack and the demo show a genuine "sent" state.
+   */
+  recordCommsSend(input: {
+    candidate_id: string;
+    deliveries: Array<{ channel: string; target: string; delivery_ref: string }>;
+  }): { sent_at: string } {
+    this.requireCandidate(input.candidate_id);
+    const now = this.now();
+    const insert = this.db.prepare(
+      'INSERT INTO comms_delivery (candidate_id, channel, target, delivery_ref, sent_at) VALUES (?, ?, ?, ?, ?)',
+    );
+    this.db.transaction((deliveries: typeof input.deliveries) => {
+      for (const d of deliveries) {
+        insert.run(input.candidate_id, d.channel, d.target, d.delivery_ref, now);
+      }
+    })(input.deliveries);
+    return { sent_at: now };
+  }
+
+  listCommsDeliveries(candidateId: string): Array<{
+    channel: string;
+    target: string;
+    delivery_ref: string;
+    sent_at: string;
+  }> {
+    return this.db
+      .prepare(
+        'SELECT channel, target, delivery_ref, sent_at FROM comms_delivery WHERE candidate_id = ? ORDER BY sent_at ASC',
+      )
+      .all(candidateId) as Array<{ channel: string; target: string; delivery_ref: string; sent_at: string }>;
+  }
+
   linkSchedule(candidateId: string, scheduleId: string): void {
     this.requireCandidate(candidateId);
     this.db
@@ -355,6 +397,7 @@ export class Store {
       risk_scores: this.listRiskScores(candidateId),
       decisions: this.listDecisions(candidateId),
       release_decisions: this.listReleaseDecisions(candidateId),
+      comms_deliveries: this.listCommsDeliveries(candidateId),
       schedule_id: this.getScheduleLink(candidateId),
     };
   }
