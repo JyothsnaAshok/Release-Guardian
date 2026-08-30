@@ -16,24 +16,29 @@ Built on [TrueForge](https://github.com/truefoundry/trueforge) for the WeMakeDev
 
 Given a release candidate (branch / tag / PR ref), Release Guardian:
 
-1. Fans out two parallel subagents — **Freeze Check** (calendar + incidents) and
+1. Fans out two parallel **subagents** — **Freeze Check** (calendar + incidents) and
    **Readiness Check** (GitHub diff / CI / migrations / incidents) — each reporting a
    failed lookup as *unknown*, never as pass.
 2. Runs the **Rollback Check** in the main context: **verifies rollback by executing
-   it** — clones the candidate in a Daytona sandbox and runs its `verify-rollback`
+   it** — clones the candidate in a Daytona **sandbox** and runs its `verify-rollback`
    (SQL `down`-migration parity, or a code round-trip). `migration_reversible` comes
    from the exit code and the saved result carries the verbatim run output — the
    verdict cannot be asserted without the evidence.
 3. Aggregates the three structured results into one **RiskScore in Python (Code
    Mode)** — counts and rules (blockers / concerns / unknowns), not prose.
-4. **Gate 1** — renders the decision card, then pauses for a human to approve / deny
-   / override the go / no-go. Fires on every decision, including `no_go`.
+4. **Gate 1** — renders the decision as a **Generative UI** card, then asks the human
+   (approve / override to go / conditional-go / no-go / cancel). Fires on every
+   decision, including `no_go`.
 5. On go / conditional-go: drafts the release comms (Slack summary + stakeholder
-   email, different registers).
-6. **Gate 2** — pauses again before both drafts are handed off to send, under one
+   email, different registers) as a Generative UI preview card.
+6. **Gate 2** — asks again before both drafts are handed off to send, under one
    approval.
 7. On no_go: schedules a nightly re-check; each trigger is a fresh session that
    reloads the candidate from the store and re-surfaces it once unblocked.
+
+The UI is TrueForge's own chat UI (`localhost:8790`) — the agent is tuned so its
+visible output is just the two cards; the tool calls, sandbox runs and Code Mode
+sit in the collapsed **Agent Steps** panel.
 
 ## Layout
 
@@ -46,22 +51,8 @@ scripts/setup-providers.mjs     Configure model providers / Daytona / MCP server
 scripts/smoke-{freeze,readiness,rollback}.mjs   Per-check end-to-end smoke tests
 scripts/smoke-e2e.mjs           Full pipeline against the real agent (checks -> aggregate -> gates)
 fixtures/sample-repo/           Seed for the demo repos (see below)
-ui/                             The console — TrueForge UI SDK + brand theme + slot overrides
+skills/                         freeze-policy · rollback-runbook-format · comms-tone
 ```
-
-## The console (`ui/`)
-
-`npm run ui:dev` (Vite, port 5273 — proxies the TrueForge API). The TrueForge UI SDK
-pinned to the `release-guardian` agent, with a brand theme and two slot overrides:
-
-- **`CheckLane`** — each parallel check renders as a labelled status lane
-  (running / done / error), the visual proof of the harness's subagent fan-out.
-- **`GateApprovalBar`** — an unmistakable banner on each of the two approval gates,
-  so the operator sees *which* irreversible action they are signing off, before it
-  runs. The Approve / Deny buttons are the harness's own tool-approval response —
-  the gate is the real checkpoint, just given a purpose-built surface.
-
-Streaming, session history, and the MCP-OAuth popups are the SDK's, unchanged.
 
 ## Demo repos (the release candidates under test)
 
@@ -103,12 +94,26 @@ npm run mocks:dev                   # terminal 3 — mock-connectors MCP on :920
 
 npm run setup:providers            # model provider + Daytona + all MCP servers + skills, via the SDK
 npm run agent:apply                # create/update the "release-guardian" agent
-npm run ui:dev                     # the console on :5273
+```
+
+Then open TrueForge (`http://localhost:8790`), pick **release-guardian** from the
+Agents Library, and paste a candidate:
+
+```
+Evaluate release candidate "rc-1042".
+Repo owner: JyothsnaAshok
+Repo name: orders-service
+Clone URL: https://github.com/JyothsnaAshok/orders-service.git
+Candidate ref: release/v1.3.0
+Last release tag: v1.2.0
 ```
 
 `setup:providers` configures everything reachable over the API; the only manual step
 is authorising any real OAuth connector under **Settings → Connectors**. Run
 `npm run smoke:e2e` for a full unattended pipeline check.
+
+> Skills are git-cloned into the sandbox on init, so **`Release-Guardian` must be a
+> public repo** for the Rollback Check's dry-run to run.
 
 ## Qodo Code Review Evidence
 

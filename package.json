@@ -5,7 +5,7 @@
   "description": "An agent that decides whether a release is safe to ship — built on TrueForge for the WeMakeDevs Agent Harness hackathon.",
   "type": "module",
   "engines": { "node": ">=22.14.0" },
-  "workspaces": ["packages/*", "ui"],
+  "workspaces": ["packages/*"],
   "scripts": {
     "guardian:dev": "npm --workspace packages/guardian-actions run dev",
     "guardian:start": "npm --workspace packages/guardian-actions run start",
@@ -17,8 +17,6 @@
     "smoke:readiness": "node --env-file=.env scripts/smoke-readiness.mjs",
     "smoke:rollback": "node --env-file=.env scripts/smoke-rollback.mjs",
     "smoke:e2e": "node --env-file=.env scripts/smoke-e2e.mjs",
-    "ui:dev": "npm --workspace ui run dev",
-    "ui:build": "npm --workspace ui run build",
     "typecheck": "tsc -b --pretty"
   },
   "dependencies": {
@@ -26,8 +24,5 @@
   },
   "devDependencies": {
     "typescript": "^5.6.3"
-  },
-  "overrides": {
-    "zustand": "^5.0.15"
   }
 }
