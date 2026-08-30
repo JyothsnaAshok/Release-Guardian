@@ -2,19 +2,19 @@ import type { SubAgentCardProps } from '@truefoundry/trueforge-ui';
 import { verdict } from '../theme';
 
 /**
- * SubAgentCard override — renders each parallel check (Freeze / Readiness /
- * Rollback) as a labelled lane that collapses to a one-line status. This is the
- * visual proof of the harness's subagent fan-out.
+ * SubAgentCard override — each parallel check renders as a labelled status lane
+ * that collapses to a single line. The lane's left rule carries the verdict
+ * colour: this is the operator's at-a-glance read on the fan-out.
  */
-const LANE_LABELS: Record<string, string> = {
-  freeze: 'Freeze Check',
-  readiness: 'Readiness Check',
-  rollback: 'Rollback Check',
+const LANES: Record<string, string> = {
+  freeze: 'Freeze',
+  readiness: 'Readiness',
+  rollback: 'Rollback',
 };
 
 function laneName(agentName: string, instruction: string): string {
   const hay = `${agentName} ${instruction}`.toLowerCase();
-  for (const key of Object.keys(LANE_LABELS)) if (hay.includes(key)) return LANE_LABELS[key];
+  for (const key of Object.keys(LANES)) if (hay.includes(key)) return LANES[key];
   return agentName || 'Check';
 }
 
@@ -29,55 +29,67 @@ export function CheckLane({
 }: SubAgentCardProps) {
   const color =
     status === 'running' ? verdict.unknown : status === 'success' ? verdict.ok : verdict.bad;
-  const label =
-    status === 'running' ? 'running…' : status === 'success' ? 'done' : 'error';
+  const label = status === 'running' ? 'running' : status === 'success' ? 'complete' : 'error';
 
   return (
     <div
       style={{
-        border: '1px solid var(--aui-border, #e2e8f0)',
-        borderLeft: `3px solid ${color}`,
-        borderRadius: 8,
-        margin: '6px 0',
-        background: 'var(--aui-card-bg, #fff)',
+        border: '1px solid var(--border)',
+        borderLeft: `2px solid ${color}`,
+        borderRadius: 'var(--radius, 6px)',
+        background: 'var(--card-bg)',
+        margin: '4px 0',
       }}
     >
       <button
+        type="button"
         onClick={onToggle}
         style={{
           all: 'unset',
+          boxSizing: 'border-box',
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
-          gap: 10,
+          gap: 9,
           width: '100%',
-          padding: '10px 12px',
-          boxSizing: 'border-box',
+          padding: '9px 11px',
+          font: 'inherit',
         }}
       >
         <span
           style={{
-            width: 8,
-            height: 8,
+            flex: '0 0 auto',
+            width: 7,
+            height: 7,
             borderRadius: '50%',
             background: color,
-            flex: '0 0 auto',
-            animation: status === 'running' ? 'rg-pulse 1.2s ease-in-out infinite' : 'none',
+            animation: status === 'running' ? 'rg-pulse 1.3s ease-in-out infinite' : undefined,
           }}
         />
-        <strong style={{ fontSize: 13 }}>{laneName(agentName, instruction)}</strong>
-        <span style={{ fontSize: 12, color: 'var(--aui-text-secondary, #64748b)' }}>{label}</span>
-        {durationText && (
-          <span style={{ fontSize: 11, color: 'var(--aui-text-secondary, #64748b)', marginLeft: 'auto' }}>
-            {durationText}
-          </span>
-        )}
-        <span style={{ fontSize: 11, color: 'var(--aui-text-secondary, #64748b)' }}>
-          {expanded ? '▾' : '▸'}
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+          {laneName(agentName, instruction)}
+        </span>
+        <span style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>{label}</span>
+        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          {durationText && (
+            <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{durationText}</span>
+          )}
+          <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{expanded ? '▾' : '▸'}</span>
         </span>
       </button>
-      {expanded && <div style={{ padding: '0 12px 10px 30px' }}>{children}</div>}
-      <style>{`@keyframes rg-pulse { 0%,100%{opacity:1} 50%{opacity:.3} }`}</style>
+      {expanded && (
+        <div
+          style={{
+            padding: '2px 12px 10px 27px',
+            borderTop: '1px solid var(--border)',
+            fontSize: 13,
+            color: 'var(--text-secondary)',
+          }}
+        >
+          {children}
+        </div>
+      )}
+      <style>{`@keyframes rg-pulse{0%,100%{opacity:1}50%{opacity:.35}}`}</style>
     </div>
   );
 }

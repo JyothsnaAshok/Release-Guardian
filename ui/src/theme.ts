@@ -4,30 +4,29 @@ import type { TrueForgeUI } from '@truefoundry/trueforge-ui';
 type ThemeConfig = NonNullable<ComponentProps<typeof TrueForgeUI>['theme']>;
 
 /**
- * Release Guardian brand theme. `SemanticTokens` is a flat set applied over the
- * chosen preset, so we override only the brand-critical surfaces (slate chrome,
- * amber primary action) and let the preset carry the rest, including dark mode.
- * Verdict colours (green / amber / red) are reserved for the check statuses and
- * live in `verdict` below, not in the chat tokens.
+ * The TrueForge preset is already a well-resolved dark/light system, so we leave
+ * the chrome alone and spend the brand budget in exactly two places: the top bar
+ * (App.tsx) and the two slot overrides. The only token we touch is the primary
+ * action colour, so an Approve button reads as a Release Guardian control.
  */
 export const theme: ThemeConfig = {
   preset: 'trueforge',
   tokens: {
-    sidebarBg: '#0f172a',
-    topbarBg: '#0f172a',
-    primaryButtonBg: '#b45309',
-    primaryButtonHover: '#92400e',
-    primaryButtonText: '#ffffff',
-    focusRing: '#b45309',
-    fontFamily:
-      'ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    primaryButtonBg: '#c2410c',
+    primaryButtonHover: '#9a3412',
+    primaryButtonText: '#fff7ed',
+    focusRing: '#c2410c',
   },
 };
 
-/** Verdict colours — the one place check status colour is defined. */
+/**
+ * Verdict palette — the one place check-status colour is defined. Amber is the
+ * brand hue and also means "attention / conditional", which is deliberate: a
+ * conditional-go is the state the operator most needs to look at.
+ */
 export const verdict = {
-  ok: '#15803d',
-  warn: '#b45309',
-  bad: '#b91c1c',
-  unknown: '#64748b',
+  ok: '#3f9142',
+  warn: '#c2410c',
+  bad: '#c0392b',
+  unknown: '#6b7280',
 } as const;

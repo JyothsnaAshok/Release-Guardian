@@ -2,43 +2,49 @@ import { TrueForgeUI } from '@truefoundry/trueforge-ui';
 import { theme } from './theme';
 import { CheckLane } from './slots/CheckLane';
 import { GateApprovalBar } from './slots/GateApprovalBar';
+import { SubmitPrompt } from './slots/SubmitPrompt';
+import './app.css';
 
 const baseUrl = import.meta.env.VITE_TRUEFORGE_BASE_URL ?? '';
 
 /**
  * Release Guardian console — the TrueForge UI SDK pinned to the release-guardian
- * agent, with a brand theme and two slot overrides:
- *   - CheckLane        — the three parallel checks as labelled status lanes
- *   - GateApprovalBar  — an unmistakable banner on each of the two approval gates
- * The streaming, session history, MCP-OAuth popups and approval round-trip are the
- * SDK's; we only reshape what the operator sees.
+ * agent. The SDK's chrome, streaming, history, approval round-trip and MCP-OAuth
+ * popups are left as-is; the identity is one top bar and two slot overrides:
+ *   CheckLane        — each check as a status lane (the parallel-fan-out view)
+ *   GateApprovalBar  — a banner naming the irreversible action at each gate
  */
 export default function App() {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh' }}>
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'baseline',
-          gap: 12,
-          padding: '10px 16px',
-          background: '#0f172a',
-          color: '#f1f5f9',
-        }}
-      >
-        <strong style={{ fontSize: 15, letterSpacing: 0.2 }}>Release Guardian</strong>
-        <span style={{ fontSize: 12, color: '#94a3b8' }}>
-          decides whether a release is safe to ship — every check read or executed, both
-          irreversible steps gated
+    <div className="rg-app">
+      <header className="rg-bar">
+        <span className="rg-mark" aria-hidden="true">
+          <svg width="15" height="17" viewBox="0 0 15 17" fill="none">
+            <path
+              d="M7.5 1 1 3.4v4.3c0 4 2.8 6.7 6.5 8 3.7-1.3 6.5-4 6.5-8V3.4L7.5 1Z"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinejoin="round"
+            />
+            <path d="M4.7 8.6 6.8 10.8 10.5 6.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
         </span>
+        <span className="rg-word">Release&nbsp;Guardian</span>
+        <span className="rg-sep" aria-hidden="true" />
+        <span className="rg-tag">Ship or don&rsquo;t — every check read or executed, both gates held</span>
       </header>
-      <div style={{ flex: 1, minHeight: 0 }}>
+
+      <div className="rg-body">
         <TrueForgeUI
           server={{ type: 'trueforge', baseUrl }}
           layout="sidebar"
           agentConfig={{ mode: 'SingleAgent', name: 'release-guardian' }}
           theme={theme}
-          overrides={{ SubAgentCard: CheckLane, ToolApprovalBar: GateApprovalBar }}
+          overrides={{
+            SubAgentCard: CheckLane,
+            ToolApprovalBar: GateApprovalBar,
+            WelcomeScreen: SubmitPrompt,
+          }}
         />
       </div>
     </div>

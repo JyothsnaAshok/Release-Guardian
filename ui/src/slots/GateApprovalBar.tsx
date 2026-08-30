@@ -2,19 +2,20 @@ import { ToolApprovalBar, type ToolApprovalBarProps } from '@truefoundry/truefor
 import { verdict } from '../theme';
 
 /**
- * ToolApprovalBar override. The generic Allow/Deny bar still does the work — this
- * wraps it in an unmistakable banner for the two gates that matter, so the human
- * sees *which* irreversible action they are approving, before it runs.
+ * ToolApprovalBar override. The SDK's Allow/Deny bar still does the work — this
+ * frames the two gates that matter so the operator sees *which* irreversible
+ * action they are signing off, before it runs. Every other tool passes straight
+ * through untouched.
  */
-const GATES: Record<string, { title: string; blurb: string; tone: string }> = {
+const GATES: Record<string, { eyebrow: string; line: string; tone: string }> = {
   commit_release_decision: {
-    title: 'Release decision — approval required',
-    blurb: 'Approving proceeds with the go / no-go for this release. A wrong call is not easily undone.',
+    eyebrow: 'Gate 1 · Release decision',
+    line: 'Approving records the go / no-go. A wrong call puts real risk on production.',
     tone: verdict.bad,
   },
   handoff_comms: {
-    title: 'Release comms — approval required',
-    blurb: 'Approving hands both the Slack summary and the stakeholder email off to be sent. An org-wide message cannot be unsent.',
+    eyebrow: 'Gate 2 · Release comms',
+    line: 'Approving hands the Slack summary and the stakeholder email off to send. An org-wide message cannot be unsent.',
     tone: verdict.warn,
   },
 };
@@ -31,21 +32,29 @@ export function GateApprovalBar(props: ToolApprovalBarProps) {
   return (
     <div
       style={{
-        border: `1px solid ${gate.tone}`,
-        borderRadius: 10,
-        overflow: 'hidden',
-        margin: '10px 0',
+        border: `1px solid var(--border)`,
+        borderTop: `2px solid ${gate.tone}`,
+        borderRadius: 'var(--radius, 6px)',
+        background: 'var(--card-bg)',
+        margin: '8px 0',
+        padding: '11px 13px',
       }}
     >
-      <div style={{ background: gate.tone, color: '#fff', padding: '8px 12px', fontSize: 13, fontWeight: 600 }}>
-        {gate.title}
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+          color: gate.tone,
+        }}
+      >
+        {gate.eyebrow}
       </div>
-      <div style={{ padding: '10px 12px', background: 'var(--aui-card-bg, #fff)' }}>
-        <p style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--aui-text-secondary, #475569)' }}>
-          {gate.blurb}
-        </p>
-        <ToolApprovalBar {...props} />
-      </div>
+      <p style={{ margin: '5px 0 10px', fontSize: 13, lineHeight: 1.45, color: 'var(--text-secondary)' }}>
+        {gate.line}
+      </p>
+      <ToolApprovalBar {...props} />
     </div>
   );
 }
