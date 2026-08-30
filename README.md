@@ -1,7 +1,7 @@
 # Release Guardian
 
 An agent that decides whether a release is safe to ship — and refuses to let a model
-*narrate* that decision. Every check is read from a system of record or actually
+_narrate_ that decision. Every check is read from a system of record or actually
 executed; the two moments that matter (shipping, communicating) are the two moments
 a human is asked.
 
@@ -18,7 +18,7 @@ Given a release candidate (branch / tag / PR ref), Release Guardian:
 
 1. Fans out two parallel **subagents** — **Freeze Check** (calendar + incidents) and
    **Readiness Check** (GitHub diff / CI / migrations / incidents) — each reporting a
-   failed lookup as *unknown*, never as pass.
+   failed lookup as _unknown_, never as pass.
 2. Runs the **Rollback Check** in the main context: **verifies rollback by executing
    it** — clones the candidate in a Daytona **sandbox** and runs its `verify-rollback`
    (SQL `down`-migration parity, or a code round-trip). `migration_reversible` comes
@@ -29,9 +29,9 @@ Given a release candidate (branch / tag / PR ref), Release Guardian:
 4. **Gate 1** — renders the decision as a **Generative UI** card, then asks the human
    (approve / override to go / conditional-go / no-go / cancel). Fires on every
    decision, including `no_go`.
-5. On go / conditional-go: drafts **one internal release email** (engineering /
-   on-call audience — technical, carries the full rollback plan) as a Generative UI
-   preview card.
+5. On go / conditional-go: **asks whether to draft the release email at all**, then
+   drafts **one internal release email** (engineering / on-call audience — technical,
+   carries the full rollback plan) as a Generative UI preview card.
 6. **Gate 2** — asks again before the email goes out. On approval it is **sent for
    real over Gmail**.
 7. On no_go: schedules a nightly re-check; each trigger is a fresh session that
@@ -60,11 +60,11 @@ skills/                         freeze-policy · rollback-runbook-format · comm
 
 The agent analyses real GitHub repos, not fixtures:
 
-| Repo | Case | Candidate branch |
-| --- | --- | --- |
-| [`orders-service`](https://github.com/JyothsnaAshok/orders-service) `release/v1.3.0` | SQL migration — `0003` drops a column with live data and cannot be faithfully reversed → **NO-GO** | vs tag `v1.2.0` |
-| [`orders-service`](https://github.com/JyothsnaAshok/orders-service) `release/v1.4.0` | Clean release — reversible migration + a current rollback runbook → **GO**, drafts the release email, Gate 2 | vs tag `v1.2.0` |
-| [`checkout-api`](https://github.com/JyothsnaAshok/checkout-api) `release/v2.1.0` | Pure code — persisted-state format moves to `v2`; the upgrade is safe and CI is green, but a rollback strands the service → **NO-GO** | vs tag `v2.0.0` |
+| Repo                                                                                 | Case                                                                                                                                  | Candidate branch |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| [`orders-service`](https://github.com/JyothsnaAshok/orders-service) `release/v1.3.0` | SQL migration — `0003` drops a column with live data and cannot be faithfully reversed → **NO-GO**                                    | vs tag `v1.2.0`  |
+| [`orders-service`](https://github.com/JyothsnaAshok/orders-service) `release/v1.4.0` | Clean release — reversible migration + a current rollback runbook → **GO**, drafts the release email, Gate 2                          | vs tag `v1.2.0`  |
+| [`checkout-api`](https://github.com/JyothsnaAshok/checkout-api) `release/v2.1.0`     | Pure code — persisted-state format moves to `v2`; the upgrade is safe and CI is green, but a rollback strands the service → **NO-GO** | vs tag `v2.0.0`  |
 
 CI is green on all three — a human would ship them. On `v1.3.0` / `v2.1.0` the
 Rollback Check is what catches that they can't be undone.
@@ -87,10 +87,10 @@ freeze is any calendar event whose title starts with `FREEZE:`. Without
 so swapping in a real PagerDuty MCP is a connector-config change, not an agent change.
 `PAGERDUTY_SCENARIO` selects the world:
 
-| Scenario | Meaning |
-| --- | --- |
-| `clear` | one auto-resolved incident — nothing blocking (default) |
-| `incident` | a triggered high-urgency incident |
+| Scenario   | Meaning                                                 |
+| ---------- | ------------------------------------------------------- |
+| `clear`    | one auto-resolved incident — nothing blocking (default) |
+| `incident` | a triggered high-urgency incident                       |
 
 ## Quick start
 
@@ -131,4 +131,80 @@ Run `npm run smoke:e2e` for a full unattended pipeline check.
 ## Qodo Code Review Evidence
 
 <!-- Populated from PR history — links to merged PRs with completed Qodo reviews. -->
+
 _See PR history; every substantive change went through a reviewed pull request._
+
+1 · GO — clean release, real email goes out
+Setup: MOCK_SCENARIO=clear (default). Target date is clear of the freeze.
+
+Evaluate this release candidate.
+
+Repo: https://github.com/JyothsnaAshok/orders-service
+Candidate ref: release/v1.4.0
+Previous release: v1.2.0
+Target deploy: 2026-09-15T14:00:00Z
+Candidate id: rc-1401
+Expect: Freeze PASS · Readiness PASS · Rollback PASS (0003_add_priority reverses cleanly, ROLLBACK.md current) → GO → approve at Gate 1 → Comms card → Allow at Gate 2 → real Gmail to jyothsna1809@gmail.com.
+
+2 · NO-GO — calendar freeze
+Setup: MOCK_SCENARIO=clear. Deploying today hits the real FREEZE: event.
+
+Evaluate this release candidate.
+
+Repo: https://github.com/JyothsnaAshok/orders-service
+Candidate ref: release/v1.4.0
+Previous release: v1.2.0
+Deploy now
+Candidate id: rc-1402
+Expect: Freeze BLOCKED (FREEZE: production change freeze overlaps the window) → NO-GO → schedule_recheck → asks whether to close the candidate. No comms.
+
+3 · NO-GO — irreversible migration
+Setup: MOCK_SCENARIO=clear. Date clear of freeze so the migration is the sole blocker.
+
+Evaluate this release candidate.
+
+Repo: https://github.com/JyothsnaAshok/orders-service
+Candidate ref: release/v1.3.0
+Previous release: v1.2.0
+Target deploy: 2026-09-15T14:00:00Z
+Candidate id: rc-1301
+Expect: sandbox runs migrate.mjs verify-rollback → exits 1 (0003_drop_status_column's down recreates the column but loses shipped/refunded values) → migration_reversible: false → NO-GO. failing_migration names it; runbook also missing (listed as a concern).
+
+4 · NO-GO — pure-code release that can't roll back
+Setup: MOCK_SCENARIO=clear.
+
+Evaluate this release candidate.
+
+Repo: https://github.com/JyothsnaAshok/checkout-api
+Candidate ref: release/v2.1.0
+Previous release: v2.0.0
+Target deploy: 2026-09-15T14:00:00Z
+Candidate id: rc-2101
+Expect: Readiness PASS (CI green, no migration) — but the sandbox runs scripts/verify-rollback.mjs → fails (v2.0.0's reader can't parse the new v2 state file) → migration_reversible: false → NO-GO. Shows a green-CI release still being blocked because rollback was executed, not assumed.
+
+5 · NO-GO — active production incident
+Setup: restart mocks as MOCK_SCENARIO=incident npm run mocks:dev. Future date so it's an incident-readiness block, not a freeze.
+
+Evaluate this release candidate.
+
+Repo: https://github.com/JyothsnaAshok/orders-service
+Candidate ref: release/v1.4.0
+Previous release: v1.2.0
+Target deploy: 2026-09-15T14:00:00Z
+Candidate id: rc-1403
+Expect: Readiness BLOCKED — open_incidents: ["PD-1042 …"] (triggered, high urgency) → NO-GO. Switch mocks back to clear afterward.
+
+6 · CONDITIONAL GO — concern accepted by a human
+No fixture forces this on its own, so trigger it one of two ways:
+
+Human override: run prompt 1, then at Gate 1 answer "Override to conditional_go". Both comms messages then state the concern + that a human accepted it.
+Natural trigger: on a branch off release/v1.4.0 with ROLLBACK.md deleted → Rollback returns reversible-but-runbook_current: false → capped at CONDITIONAL GO at Gate 1.
+
+# Repo / ref MOCK_SCENARIO Deploy Outcome
+
+1 orders-service release/v1.4.0 clear 2026-09-15 GO + real email
+2 orders-service release/v1.4.0 clear now NO-GO (freeze)
+3 orders-service release/v1.3.0 clear 2026-09-15 NO-GO (migration)
+4 checkout-api release/v2.1.0 clear 2026-09-15 NO-GO (rollback)
+5 orders-service release/v1.4.0 incident 2026-09-15 NO-GO (incident)
+6 prompt 1 + Gate-1 override clear 2026-09-15 CONDITIONAL GO
