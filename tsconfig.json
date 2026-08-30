@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "packages/guardian-actions" },
-    { "path": "packages/mock-connectors" }
+    { "path": "packages/pagerduty-mock" },
+    { "path": "packages/composio-bridge" }
   ]
 }

@@ -46,6 +46,13 @@ export const RollbackCheckResult = z
     failing_migration: z.string().nullable(),
     flags_default_safe: tri,
     runbook_current: tri,
+    /**
+     * Verbatim stdout/stderr tail of the sandbox `verify-rollback` run. Required
+     * whenever `migration_reversible` is a boolean — the reversibility verdict is
+     * only valid with the execution evidence behind it. `null` only when
+     * `migration_reversible` is `"unknown"` (the dry-run could not be executed).
+     */
+    dry_run_output: z.string().nullable(),
   })
   .strict();
 
@@ -54,6 +61,27 @@ export const CHECK_SCHEMAS = {
   readiness: ReadinessCheckResult,
   rollback: RollbackCheckResult,
 } as const;
+
+/**
+ * Output of the Code Mode aggregation step (PRD §7): the three structured check
+ * results reduced to one decision by counts + rules, not prose.
+ *
+ * - `blockers`  — conditions that force `no_go` (in freeze, tests failing, migration
+ *   not reversible, open incident, no prior artifact).
+ * - `concerns`  — conditions that downgrade `go` to `conditional_go` but do not block
+ *   (e.g. rollback runbook stale).
+ * - `unknowns`  — headline/evidence fields a check could not determine; any unknown
+ *   caps the outcome at `conditional_go` (we cannot assert "safe").
+ */
+export const RiskScore = z
+  .object({
+    decision: z.enum(['go', 'conditional_go', 'no_go']),
+    blockers: z.array(z.string()),
+    concerns: z.array(z.string()),
+    unknowns: z.array(z.string()),
+    summary: z.string(),
+  })
+  .strict();
 
 export type CheckKind = keyof typeof CHECK_SCHEMAS;
 

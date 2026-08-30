@@ -12,10 +12,16 @@ import { dirname } from 'node:path';
 
 export type CheckKind = 'freeze' | 'readiness' | 'rollback';
 
+/** `mock_sent` records an offline mock dispatch — deliberately distinct from a real `sent`. */
+export type CommsDraftStatus = 'draft' | 'ready_to_send' | 'sent' | 'mock_sent';
+
 export interface ReleaseCandidate {
   id: string;
   ref: string;
   submitted_at: string;
+  /** ISO-8601 planned deploy instant. `null` means "ship now" — the Freeze Check
+   *  then evaluates the calendar for the current window instead of a future one. */
+  target_deploy_at: string | null;
   status: 'evaluating' | 'blocked' | 'approved' | 'shipped' | 'cancelled';
 }
 
@@ -59,10 +65,11 @@ export class UnknownCandidateError extends Error {
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS release_candidate (
-  id            TEXT PRIMARY KEY,
-  ref           TEXT NOT NULL,
-  submitted_at  TEXT NOT NULL,
-  status        TEXT NOT NULL
+  id               TEXT PRIMARY KEY,
+  ref              TEXT NOT NULL,
+  submitted_at     TEXT NOT NULL,
+  target_deploy_at TEXT,
+  status           TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS check_result (
   candidate_id   TEXT NOT NULL REFERENCES release_candidate(id),
@@ -87,12 +94,25 @@ CREATE TABLE IF NOT EXISTS release_decision (
   actor           TEXT NOT NULL,
   decided_at      TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS risk_score (
+  candidate_id TEXT NOT NULL REFERENCES release_candidate(id),
+  score_json   TEXT NOT NULL,
+  computed_by  TEXT NOT NULL,
+  computed_at  TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS comms_draft (
   candidate_id TEXT NOT NULL REFERENCES release_candidate(id),
   channel      TEXT NOT NULL,
   content      TEXT NOT NULL,
   status       TEXT NOT NULL,
   updated_at   TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS comms_delivery (
+  candidate_id TEXT NOT NULL REFERENCES release_candidate(id),
+  channel      TEXT NOT NULL,
+  target       TEXT NOT NULL,
+  delivery_ref TEXT NOT NULL,
+  sent_at      TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS schedule_link (
   candidate_id TEXT PRIMARY KEY REFERENCES release_candidate(id),
@@ -111,6 +131,22 @@ export class Store {
     // SQLite ignores REFERENCES clauses unless this is enabled per-connection.
     this.db.pragma('foreign_keys = ON');
     this.db.exec(SCHEMA);
+    this.migrate();
+  }
+
+  /**
+   * Idempotent column adds for databases created by an earlier revision.
+   * `CREATE TABLE IF NOT EXISTS` never alters an existing table, so a column
+   * added to SCHEMA after a DB was first created is missing until we add it here.
+   */
+  private migrate(): void {
+    const ensureColumn = (table: string, column: string, decl: string) => {
+      const cols = this.db.pragma(`table_info(${table})`) as Array<{ name: string }>;
+      if (!cols.some((c) => c.name === column)) {
+        this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`);
+      }
+    };
+    ensureColumn('release_candidate', 'target_deploy_at', 'TEXT');
   }
 
   private now(): string {
@@ -124,13 +160,21 @@ export class Store {
     return existing;
   }
 
-  upsertCandidate(id: string, ref: string): ReleaseCandidate {
+  upsertCandidate(id: string, ref: string, targetDeployAt?: string | null): ReleaseCandidate {
     const existing = this.getCandidate(id);
     if (existing) return existing;
-    const row: ReleaseCandidate = { id, ref, submitted_at: this.now(), status: 'evaluating' };
+    const row: ReleaseCandidate = {
+      id,
+      ref,
+      submitted_at: this.now(),
+      target_deploy_at: targetDeployAt ?? null,
+      status: 'evaluating',
+    };
     this.db
-      .prepare('INSERT INTO release_candidate (id, ref, submitted_at, status) VALUES (?, ?, ?, ?)')
-      .run(row.id, row.ref, row.submitted_at, row.status);
+      .prepare(
+        'INSERT INTO release_candidate (id, ref, submitted_at, target_deploy_at, status) VALUES (?, ?, ?, ?, ?)',
+      )
+      .run(row.id, row.ref, row.submitted_at, row.target_deploy_at, row.status);
     return row;
   }
 
@@ -258,11 +302,34 @@ export class Store {
     }));
   }
 
+  /** The most recent committed go / no-go outcome, or undefined if Gate 1 has not run. */
+  latestReleaseDecision(candidateId: string): ReleaseDecision | undefined {
+    const all = this.listReleaseDecisions(candidateId);
+    return all[all.length - 1];
+  }
+
+  /** Persist a computed RiskScore (the Code Mode aggregation output), before Gate 1. */
+  saveRiskScore(input: { candidate_id: string; score: unknown; computed_by: string }): void {
+    this.requireCandidate(input.candidate_id);
+    this.db
+      .prepare(
+        'INSERT INTO risk_score (candidate_id, score_json, computed_by, computed_at) VALUES (?, ?, ?, ?)',
+      )
+      .run(input.candidate_id, JSON.stringify(input.score ?? null), input.computed_by, this.now());
+  }
+
+  listRiskScores(candidateId: string): Array<{ score: unknown; computed_by: string; computed_at: string }> {
+    const rows = this.db
+      .prepare('SELECT score_json, computed_by, computed_at FROM risk_score WHERE candidate_id = ? ORDER BY computed_at ASC')
+      .all(candidateId) as Array<{ score_json: string; computed_by: string; computed_at: string }>;
+    return rows.map((r) => ({ score: JSON.parse(r.score_json), computed_by: r.computed_by, computed_at: r.computed_at }));
+  }
+
   saveCommsDraft(input: {
     candidate_id: string;
     channel: string;
     content: string;
-    status: 'draft' | 'ready_to_send' | 'sent';
+    status: CommsDraftStatus;
   }): void {
     this.saveCommsDrafts({
       candidate_id: input.candidate_id,
@@ -274,7 +341,7 @@ export class Store {
   /** Persist every channel draft for one Gate 2 handoff in a single transaction. */
   saveCommsDrafts(input: {
     candidate_id: string;
-    status: 'draft' | 'ready_to_send' | 'sent';
+    status: CommsDraftStatus;
     drafts: Array<{ channel: string; content: string }>;
   }): void {
     this.requireCandidate(input.candidate_id);
@@ -290,6 +357,41 @@ export class Store {
       },
     );
     writeAll(input.drafts);
+  }
+
+  /**
+   * Record a comms send. In this local build "send" is a mock — no real Slack/mail
+   * call — but the delivery record is written exactly as a real integration would,
+   * so the evidence pack and the demo show a genuine "sent" state.
+   */
+  recordCommsSend(input: {
+    candidate_id: string;
+    deliveries: Array<{ channel: string; target: string; delivery_ref: string }>;
+  }): { sent_at: string } {
+    this.requireCandidate(input.candidate_id);
+    const now = this.now();
+    const insert = this.db.prepare(
+      'INSERT INTO comms_delivery (candidate_id, channel, target, delivery_ref, sent_at) VALUES (?, ?, ?, ?, ?)',
+    );
+    this.db.transaction((deliveries: typeof input.deliveries) => {
+      for (const d of deliveries) {
+        insert.run(input.candidate_id, d.channel, d.target, d.delivery_ref, now);
+      }
+    })(input.deliveries);
+    return { sent_at: now };
+  }
+
+  listCommsDeliveries(candidateId: string): Array<{
+    channel: string;
+    target: string;
+    delivery_ref: string;
+    sent_at: string;
+  }> {
+    return this.db
+      .prepare(
+        'SELECT channel, target, delivery_ref, sent_at FROM comms_delivery WHERE candidate_id = ? ORDER BY sent_at ASC',
+      )
+      .all(candidateId) as Array<{ channel: string; target: string; delivery_ref: string; sent_at: string }>;
   }
 
   linkSchedule(candidateId: string, scheduleId: string): void {
@@ -317,8 +419,10 @@ export class Store {
     return {
       candidate: this.getCandidate(candidateId),
       checks: this.listCheckResults(candidateId),
+      risk_scores: this.listRiskScores(candidateId),
       decisions: this.listDecisions(candidateId),
       release_decisions: this.listReleaseDecisions(candidateId),
+      comms_deliveries: this.listCommsDeliveries(candidateId),
       schedule_id: this.getScheduleLink(candidateId),
     };
   }

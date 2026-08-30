@@ -23,7 +23,7 @@ const {
   MODEL_MAX_OUTPUT = '64000',
   DAYTONA_API_KEY,
   GUARDIAN_MCP_URL = 'http://localhost:9100/mcp',
-  MOCK_MCP_URL = 'http://localhost:9200/mcp',
+  PAGERDUTY_MCP_URL = 'http://localhost:9200/mcp',
 
   // GitHub connectors — the real one (demo repos live on github.com). Two servers:
   // the default toolset (repo/PR/commit reads) and the actions toolset (CI status),
@@ -41,6 +41,12 @@ const {
   CUSTOM_MODEL_CONTEXT_LENGTH = '128000',
   CUSTOM_MODEL_MAX_OUTPUT = '32000',
 
+  // composio-bridge — our local MCP wrapping the Composio SDK (real Google Calendar).
+  // The Composio API key itself is read by the bridge / guardian-actions processes
+  // from their own env, not sent here.
+  COMPOSIO_MCP_URL = 'http://localhost:9300/mcp',
+  COMPOSIO_API_KEY,
+
   // Skills are git-backed: registered from a repo URL + ref + path, not a local dir.
   SKILLS_REPO_URL = 'https://github.com/JyothsnaAshok/Release-Guardian',
   SKILLS_REPO_REF = 'main',
@@ -49,7 +55,7 @@ const {
 const SKILLS = [
   { name: 'freeze-policy', path: 'skills/freeze-policy', description: 'Freeze rules (calendar / incident / weekend) and the freeze-check output contract.' },
   { name: 'rollback-runbook-format', path: 'skills/rollback-runbook-format', description: 'What a valid rollback runbook contains and how the rollback dry-run is judged.' },
-  { name: 'comms-tone', path: 'skills/comms-tone', description: 'Registers and templates for the internal Slack summary vs. the stakeholder email.' },
+  { name: 'comms-tone', path: 'skills/comms-tone', description: 'Tone, length, and content rules for the single stakeholder release email.' },
 ];
 
 const failures = [];
@@ -130,9 +136,10 @@ if (DAYTONA_API_KEY) {
         type: 'daytona',
         auth: { apiKey: DAYTONA_API_KEY },
         execTimeoutMs: 120000,
-        autoStopIntervalInMinutes: 15,
-        autoArchiveIntervalInMinutes: 10080,
-        autoDeleteIntervalInMinutes: 43200,
+        // Aggressive teardown — a run's sandbox goes idle when the turn ends.
+        autoStopIntervalInMinutes: Number(process.env.DAYTONA_AUTO_STOP_MIN ?? 3),
+        autoArchiveIntervalInMinutes: Number(process.env.DAYTONA_AUTO_ARCHIVE_MIN ?? 15),
+        autoDeleteIntervalInMinutes: Number(process.env.DAYTONA_AUTO_DELETE_MIN ?? 120),
       },
     }),
   );
@@ -151,13 +158,13 @@ await step(`mcp server "guardian-actions" -> ${GUARDIAN_MCP_URL}`, () =>
   }),
 );
 
-await step(`mcp server "mock-connectors" -> ${MOCK_MCP_URL}`, () =>
+await step(`mcp server "pagerduty" -> ${PAGERDUTY_MCP_URL}`, () =>
   client.settings.mcpServers.createOrUpdate({
     manifest: {
       type: 'remote',
-      name: 'mock-connectors',
-      url: MOCK_MCP_URL,
-      description: 'Mock Calendar + PagerDuty connectors (freeze windows, on-call, incidents) while the real OAuth servers are not wired.',
+      name: 'pagerduty',
+      url: PAGERDUTY_MCP_URL,
+      description: 'PagerDuty (mock) — on-call and incidents for the Freeze / Readiness checks. Calendar is real (composio).',
     },
   }),
 );
@@ -188,6 +195,21 @@ if (GITHUB_PAT) {
   );
 } else {
   console.log('  skip github (GITHUB_PAT not set)');
+}
+
+if (COMPOSIO_API_KEY) {
+  await step(`mcp server "composio" -> ${COMPOSIO_MCP_URL}`, () =>
+    client.settings.mcpServers.createOrUpdate({
+      manifest: {
+        type: 'remote',
+        name: 'composio',
+        url: COMPOSIO_MCP_URL,
+        description: 'composio-bridge — real Google Calendar events.list for the freeze-window check.',
+      },
+    }),
+  );
+} else {
+  console.log('  skip composio (COMPOSIO_API_KEY not set)');
 }
 
 for (const skill of SKILLS) {
