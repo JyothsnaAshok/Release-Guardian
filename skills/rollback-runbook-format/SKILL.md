@@ -23,36 +23,40 @@ appears in the list => `true`. If the list is returned and the tag is absent =>
 
 ## 2. migration_reversible — the sandbox dry-run
 
-The demo repos are **public** — clone over HTTPS with no credentials. Set
-`GIT_TERMINAL_PROMPT=0` so a missing network fails fast instead of hanging on a
-credential prompt. In the sandbox:
+The demo repos are **public**. Run this **one script** in the sandbox shell,
+substituting the clone URL and candidate ref you were given. Do not improvise the
+steps — run it exactly, once:
 
-```
+```bash
+set -o pipefail
+CLONE_URL="https://github.com/<owner>/<repo>.git"; REF="<candidate-ref>"
 rm -rf /work
-GIT_TERMINAL_PROMPT=0 git clone --depth 50 https://github.com/<owner>/<repo>.git /work
-cd /work && git checkout <candidate-ref>
+if ! GIT_TERMINAL_PROMPT=0 git clone --depth 50 "$CLONE_URL" /work 2>&1; then
+  echo "__RG__ migration_reversible=unknown  (clone failed)"; exit 0
+fi
+cd /work && git checkout -q "$REF" 2>&1 || { echo "__RG__ migration_reversible=unknown  (checkout failed)"; exit 0; }
+if ls migrations/*_up.sql >/dev/null 2>&1; then
+  npm ci --silent 2>&1 | tail -3
+  OUT=$(node scripts/migrate.mjs verify-rollback /tmp/rb.sqlite 2>&1); RC=$?
+elif [ -f scripts/verify-rollback.mjs ]; then
+  npm ci --omit=dev --silent 2>&1 | tail -3 || true
+  OUT=$(npm run --silent verify-rollback 2>&1); RC=$?
+else
+  echo "__RG__ migration_reversible=unknown  (no verify-rollback in repo)"; exit 0
+fi
+echo "$OUT" | tail -40
+[ $RC -eq 0 ] && echo "__RG__ migration_reversible=true" || echo "__RG__ migration_reversible=false"
 ```
 
-If the clone command exits non-zero, the dry-run could not run — go straight to the
-`"unknown"` path below; do not analyse the diff by hand and guess.
+Read the `__RG__` marker line for the verdict, and use everything above it (the last
+40 lines of real output) as `dry_run_output`. On `false`, pull the failing migration
+name / reason from that output into `failing_migration`.
 
-Then, depending on the repo:
-
-- **SQL migrations** (`migrations/*_up.sql` + `*_down.sql` present):
-  `npm ci && node scripts/migrate.mjs verify-rollback /tmp/rb.sqlite`
-- **Code / persisted-state** (`scripts/verify-rollback.mjs` present, no migrations):
-  `npm ci --omit=dev 2>/dev/null || true; npm run verify-rollback`
-
-You MUST actually run these in the sandbox — do not assume an outcome. Capture the
-last ~40 lines of combined stdout/stderr; that goes verbatim into `dry_run_output`
-and `save_check_result` will reject a boolean `migration_reversible` without it.
-
-Exit code `0` => `migration_reversible: true`. Non-zero => `false`, and put the
-failing migration name or the reason from stdout into `failing_migration`. If the
-clone or the command genuinely cannot run (no sandbox, clone fails, toolchain
-missing) => `migration_reversible: "unknown"`, `dry_run_output: null`, and name
-`migration_reversible` in unknown_fields. Never report `true` because you could not
-run it.
+You MUST run this — do not assume an outcome and do not hand-analyse the diff
+instead. `save_check_result` rejects a boolean `migration_reversible` without a
+non-empty `dry_run_output`. Only report `"unknown"` (with `dry_run_output: null`)
+when the script itself printed an `unknown` marker or could not be run at all.
+Never report `true` because you could not run it.
 
 `verify-rollback` already enforces full parity — schema **and** row-content (a `down`
 that recreates a dropped column with a default restores the row count but loses the
