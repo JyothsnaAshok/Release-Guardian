@@ -16,18 +16,24 @@ Built on [TrueForge](https://github.com/truefoundry/trueforge) for the WeMakeDev
 
 Given a release candidate (branch / tag / PR ref), Release Guardian:
 
-1. Fans out three parallel subagents — **Freeze Check**, **Readiness Check**,
-   **Rollback Check** — each reading from real systems (GitHub, PagerDuty, Google
-   Calendar, feature flags) and reporting failed lookups as *unknown*, never as pass.
-2. **Verifies rollback by executing it** — the Rollback subagent runs the candidate's
-   `down` migrations against a throwaway DB in a Daytona sandbox and checks parity.
-3. Aggregates the three structured results into one **risk score in Python (Code Mode)** —
-   counts and rules, not prose.
-4. **Gate 1** — pauses for a human to approve / deny / override the go-no-go.
-5. Drafts the release comms (Slack summary + stakeholder email).
-6. **Gate 2** — pauses again before the comms are handed off to send.
-7. If blocked, schedules a nightly re-check; each trigger is a fresh session that
-   reloads the candidate and re-surfaces it once unblocked.
+1. Fans out two parallel subagents — **Freeze Check** (calendar + incidents) and
+   **Readiness Check** (GitHub diff / CI / migrations / incidents) — each reporting a
+   failed lookup as *unknown*, never as pass.
+2. Runs the **Rollback Check** in the main context: **verifies rollback by executing
+   it** — clones the candidate in a Daytona sandbox and runs its `verify-rollback`
+   (SQL `down`-migration parity, or a code round-trip). `migration_reversible` comes
+   from the exit code and the saved result carries the verbatim run output — the
+   verdict cannot be asserted without the evidence.
+3. Aggregates the three structured results into one **RiskScore in Python (Code
+   Mode)** — counts and rules (blockers / concerns / unknowns), not prose.
+4. **Gate 1** — renders the decision card, then pauses for a human to approve / deny
+   / override the go / no-go. Fires on every decision, including `no_go`.
+5. On go / conditional-go: drafts the release comms (Slack summary + stakeholder
+   email, different registers).
+6. **Gate 2** — pauses again before both drafts are handed off to send, under one
+   approval.
+7. On no_go: schedules a nightly re-check; each trigger is a fresh session that
+   reloads the candidate from the store and re-surfaces it once unblocked.
 
 ## Layout
 
@@ -37,11 +43,25 @@ packages/guardian-actions/      Custom MCP server: the two approval gates + app 
 packages/mock-connectors/       Mock Calendar + PagerDuty (freeze windows, on-call, incidents)
 scripts/apply-agent.mjs         Create/update the agent on a running server
 scripts/setup-providers.mjs     Configure model providers / Daytona / MCP servers via the SDK
-scripts/smoke-freeze.mjs        End-to-end check of the Freeze Check
-scripts/smoke-readiness.mjs     End-to-end check of the Readiness Check
+scripts/smoke-{freeze,readiness,rollback}.mjs   Per-check end-to-end smoke tests
+scripts/smoke-e2e.mjs           Full pipeline against the real agent (checks -> aggregate -> gates)
 fixtures/sample-repo/           Seed for the demo repos (see below)
-ui/                             Custom UI on the TrueForge UI SDK (level 2)
+ui/                             The console — TrueForge UI SDK + brand theme + slot overrides
 ```
+
+## The console (`ui/`)
+
+`npm run ui:dev` (Vite, port 5273 — proxies the TrueForge API). The TrueForge UI SDK
+pinned to the `release-guardian` agent, with a brand theme and two slot overrides:
+
+- **`CheckLane`** — each parallel check renders as a labelled status lane
+  (running / done / error), the visual proof of the harness's subagent fan-out.
+- **`GateApprovalBar`** — an unmistakable banner on each of the two approval gates,
+  so the operator sees *which* irreversible action they are signing off, before it
+  runs. The Approve / Deny buttons are the harness's own tool-approval response —
+  the gate is the real checkpoint, just given a purpose-built surface.
+
+Streaming, session history, and the MCP-OAuth popups are the SDK's, unchanged.
 
 ## Demo repos (the release candidates under test)
 
@@ -74,13 +94,21 @@ config change, not an agent change). `MOCK_SCENARIO` selects the world:
 ## Quick start
 
 ```bash
-cp .env.example .env            # then edit
+cp .env.example .env            # fill in MODEL_API_KEY, DAYTONA_API_KEY, GITHUB_PAT
 npm install
-npm run guardian:dev            # guardian-actions MCP on :9100
 
-# in TrueForge: Settings -> Connectors -> Add MCP Server -> http://localhost:9100/mcp
-npm run agent:apply             # create/update the "release-guardian" agent
+npx @truefoundry/trueforge@latest   # terminal 1 — TrueForge on :8790
+npm run guardian:dev                # terminal 2 — guardian-actions MCP on :9100
+npm run mocks:dev                   # terminal 3 — mock-connectors MCP on :9200
+
+npm run setup:providers            # model provider + Daytona + all MCP servers + skills, via the SDK
+npm run agent:apply                # create/update the "release-guardian" agent
+npm run ui:dev                     # the console on :5273
 ```
+
+`setup:providers` configures everything reachable over the API; the only manual step
+is authorising any real OAuth connector under **Settings → Connectors**. Run
+`npm run smoke:e2e` for a full unattended pipeline check.
 
 ## Qodo Code Review Evidence
 
