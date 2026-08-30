@@ -31,9 +31,15 @@ steps — run it exactly, once:
 CLONE_URL="https://github.com/<owner>/<repo>.git"; REF="<candidate-ref>"
 command -v node >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq nodejs >/dev/null 2>&1; }
 rm -rf /work
-GIT_TERMINAL_PROMPT=0 git clone --depth 30 "$CLONE_URL" /work 2>&1 \
-  && cd /work && git checkout -q "$REF" 2>&1 \
-  || { echo "__RG__ unknown (clone/checkout failed)"; exit 0; }
+# --branch works for both a branch and a tag; without it a shallow clone only
+# fetches the default branch and `git checkout <release-branch>` fails.
+GIT_TERMINAL_PROMPT=0 git clone --depth 30 --branch "$REF" "$CLONE_URL" /work 2>&1 \
+  || GIT_TERMINAL_PROMPT=0 git clone --depth 30 --no-single-branch "$CLONE_URL" /work 2>&1 \
+  || { echo "__RG__ unknown (clone failed)"; exit 0; }
+cd /work
+git checkout -q "$REF" 2>/dev/null || git checkout -q "origin/$REF" 2>/dev/null || true
+echo "on: $(git rev-parse --abbrev-ref HEAD 2>/dev/null) $(git rev-parse --short HEAD 2>/dev/null)"
+ls ROLLBACK.md docs/rollback.md RUNBOOK.md 2>/dev/null || echo "(no runbook file at this ref)"
 if [ -f scripts/migrate.mjs ]; then
   OUT=$(node scripts/migrate.mjs verify-rollback 2>&1); RC=$?
 elif [ -f scripts/verify-rollback.mjs ]; then
