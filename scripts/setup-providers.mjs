@@ -25,6 +25,13 @@ const {
   GUARDIAN_MCP_URL = 'http://localhost:9100/mcp',
   MOCK_MCP_URL = 'http://localhost:9200/mcp',
 
+  // GitHub connectors — the real one (demo repos live on github.com). Two servers:
+  // the default toolset (repo/PR/commit reads) and the actions toolset (CI status),
+  // which GitHub's remote MCP splits onto a separate endpoint.
+  GITHUB_PAT,
+  GITHUB_MCP_URL = 'https://api.githubcopilot.com/mcp/',
+  GITHUB_ACTIONS_MCP_URL = 'https://api.githubcopilot.com/mcp/x/actions/readonly',
+
   // Optional extra OpenAI-compatible "custom" provider (e.g. Cerebras).
   CUSTOM_PROVIDER_NAME = 'cerebras',
   CUSTOM_BASE_URL = 'https://api.cerebras.ai/v1',
@@ -154,6 +161,34 @@ await step(`mcp server "mock-connectors" -> ${MOCK_MCP_URL}`, () =>
     },
   }),
 );
+
+if (GITHUB_PAT) {
+  const ghAuth = { type: 'header', headers: { Authorization: `Bearer ${GITHUB_PAT}` } };
+  await step(`mcp server "github" -> ${GITHUB_MCP_URL}`, () =>
+    client.settings.mcpServers.createOrUpdate({
+      manifest: {
+        type: 'remote',
+        name: 'github',
+        url: GITHUB_MCP_URL,
+        description: 'GitHub — repo diff, commits, file contents, tags/releases, PRs for the release candidate under test.',
+        auth: ghAuth,
+      },
+    }),
+  );
+  await step(`mcp server "github-actions" -> ${GITHUB_ACTIONS_MCP_URL}`, () =>
+    client.settings.mcpServers.createOrUpdate({
+      manifest: {
+        type: 'remote',
+        name: 'github-actions',
+        url: GITHUB_ACTIONS_MCP_URL,
+        description: 'GitHub Actions (read-only) — workflow run status for a ref, job logs.',
+        auth: ghAuth,
+      },
+    }),
+  );
+} else {
+  console.log('  skip github (GITHUB_PAT not set)');
+}
 
 for (const skill of SKILLS) {
   await step(`skill "${skill.name}" <- ${SKILLS_REPO_URL}@${SKILLS_REPO_REF}/${skill.path}`, () =>

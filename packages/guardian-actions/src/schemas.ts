@@ -33,6 +33,8 @@ export const ReadinessCheckResult = z
     tests_pass: tri,
     open_incidents: evidence,
     has_migration: tri,
+    /** Migration file paths the release touches — consumed by the Rollback Check. */
+    migrations: evidence,
     diff_summary: z.string().nullable(),
   })
   .strict();
