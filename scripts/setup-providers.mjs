@@ -34,14 +34,20 @@ const {
   CUSTOM_MODEL_MAX_OUTPUT = '32000',
 } = process.env;
 
+const failures = [];
+
 async function step(label, fn) {
   try {
     await fn();
     console.log(`  ok   ${label}`);
   } catch (err) {
     const status = err?.statusCode ?? err?.status;
-    if (status === 409) console.log(`  skip ${label} (already exists)`);
-    else console.log(`  FAIL ${label}: ${err?.message ?? err}`);
+    if (status === 409) {
+      console.log(`  skip ${label} (already exists)`);
+    } else {
+      console.log(`  FAIL ${label}: ${err?.message ?? err}`);
+      failures.push(label);
+    }
   }
 }
 
@@ -126,6 +132,13 @@ await step(`mcp server "guardian-actions" -> ${GUARDIAN_MCP_URL}`, () =>
     },
   }),
 );
+
+if (failures.length > 0) {
+  console.error(`\nFAILED: ${failures.length} step(s) did not complete:`);
+  for (const label of failures) console.error(`  - ${label}`);
+  console.error('Fix the errors above and re-run before applying the agent.');
+  process.exit(1);
+}
 
 console.log('\ndone. OAuth connectors (GitHub, PagerDuty, Google Calendar) must still be');
 console.log('added in Settings -> Connectors — they need an interactive auth flow.');

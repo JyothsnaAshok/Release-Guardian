@@ -2,7 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { Store } from './store.js';
+import { Store, UnknownCandidateError } from './store.js';
 
 /**
  * guardian-actions — the first-party MCP server for Release Guardian (PRD §9.6).
@@ -17,12 +17,31 @@ import { Store } from './store.js';
  */
 
 const PORT = Number(process.env.GUARDIAN_PORT ?? 9100);
+// Local-only by default: these tools mutate approval / comms state and the endpoint
+// is unauthenticated, so it must not be reachable off-host. Override only behind an
+// authenticating proxy.
+const HOST = process.env.GUARDIAN_HOST ?? '127.0.0.1';
 const DB_PATH = process.env.GUARDIAN_DB_PATH ?? './data/guardian.sqlite';
 const store = new Store(DB_PATH);
 
 const ok = (data: unknown) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
 });
+
+const fail = (message: string) => ({
+  content: [{ type: 'text' as const, text: JSON.stringify({ error: message }, null, 2) }],
+  isError: true as const,
+});
+
+/** Run a mutating handler, turning an unknown-candidate write into a shaped MCP error. */
+async function guarded(fn: () => unknown) {
+  try {
+    return fn() as ReturnType<typeof ok>;
+  } catch (err) {
+    if (err instanceof UnknownCandidateError) return fail(err.message);
+    throw err;
+  }
+}
 
 function buildServer(): McpServer {
   const server = new McpServer(
@@ -68,10 +87,11 @@ function buildServer(): McpServer {
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     },
-    async ({ candidate_id, kind, result, unknown_fields }) => {
-      store.saveCheckResult({ candidate_id, kind, result, unknown_fields });
-      return ok({ saved: true, kind, unknown_fields });
-    },
+    async ({ candidate_id, kind, result, unknown_fields }) =>
+      guarded(() => {
+        store.saveCheckResult({ candidate_id, kind, result, unknown_fields });
+        return ok({ saved: true, kind, unknown_fields });
+      }),
   );
 
   server.registerTool(
@@ -89,12 +109,21 @@ function buildServer(): McpServer {
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     },
-    async ({ candidate_id, decision, reason, actor }) => {
-      store.recordDecision({ candidate_id, gate: 1, decision: 'approve', actor, reason });
-      store.setStatus(candidate_id, decision === 'no_go' ? 'blocked' : 'approved');
-      // PR6: emit a structured decision record the custom UI can render.
-      return ok({ committed: true, decision, next: decision === 'no_go' ? 'schedule_recheck' : 'draft_comms' });
-    },
+    async ({ candidate_id, decision, risk_score, reason, actor }) =>
+      guarded(() => {
+        // Two distinct records: the gate approval audit, and the release decision itself
+        // (exact go / conditional_go / no_go + the computed score) so a scheduled re-check
+        // or evidence pack can reconstruct it from loadFullHistory.
+        store.recordReleaseDecision({ candidate_id, decision, risk_score, reason, actor });
+        store.recordDecision({ candidate_id, gate: 1, decision: 'approve', actor, reason });
+        store.setStatus(candidate_id, decision === 'no_go' ? 'blocked' : 'approved');
+        // PR6: emit a structured decision record the custom UI can render.
+        return ok({
+          committed: true,
+          decision,
+          next: decision === 'no_go' ? 'schedule_recheck' : 'draft_comms',
+        });
+      }),
   );
 
   server.registerTool(
@@ -102,19 +131,33 @@ function buildServer(): McpServer {
     {
       title: 'Hand off release comms for sending (GATE 2, baseline)',
       description:
-        'Marks the drafted comms ready-to-send (opens mail client / posts to a review channel). Second irreversible checkpoint — an org-wide message cannot be unsent. Human approval required.',
+        'Marks BOTH drafted messages (Slack summary + stakeholder email) ready-to-send in one step. Second irreversible checkpoint — an org-wide message cannot be unsent — so both drafts transition under a single human approval.',
       inputSchema: {
         candidate_id: z.string(),
-        channel: z.enum(['slack', 'email']),
-        content: z.string().describe('Final drafted message, post-edit'),
+        slack: z.string().describe('Final Slack summary, post-edit'),
+        email: z.string().describe('Final stakeholder email, post-edit'),
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     },
-    async ({ candidate_id, channel, content }) => {
-      store.saveCommsDraft({ candidate_id, channel, content, status: 'ready_to_send' });
-      store.recordDecision({ candidate_id, gate: 2, decision: 'approve', actor: 'trueforge-default', reason: null });
-      return ok({ handed_off: true, channel, mode: 'manual_dispatch' });
-    },
+    async ({ candidate_id, slack, email }) =>
+      guarded(() => {
+        store.saveCommsDrafts({
+          candidate_id,
+          status: 'ready_to_send',
+          drafts: [
+            { channel: 'slack', content: slack },
+            { channel: 'email', content: email },
+          ],
+        });
+        store.recordDecision({
+          candidate_id,
+          gate: 2,
+          decision: 'approve',
+          actor: 'trueforge-default',
+          reason: null,
+        });
+        return ok({ handed_off: true, channels: ['slack', 'email'], mode: 'manual_dispatch' });
+      }),
   );
 
   server.registerTool(
@@ -164,12 +207,13 @@ function buildServer(): McpServer {
       },
       annotations: { readOnlyHint: false, destructiveHint: false },
     },
-    async ({ candidate_id, cron, timezone }) => {
-      // PR8: call client.schedules.create(...) and store the returned id.
-      const fakeId = `sched-stub-${candidate_id}`;
-      store.linkSchedule(candidate_id, fakeId);
-      return ok({ scheduled: true, schedule_id: fakeId, cron, timezone, stub: true });
-    },
+    async ({ candidate_id, cron, timezone }) =>
+      guarded(() => {
+        // PR8: call client.schedules.create(...) and store the returned id.
+        const fakeId = `sched-stub-${candidate_id}`;
+        store.linkSchedule(candidate_id, fakeId);
+        return ok({ scheduled: true, schedule_id: fakeId, cron, timezone, stub: true });
+      }),
   );
 
   server.registerTool(
@@ -207,6 +251,6 @@ app.post('/mcp', async (req, res) => {
   await transport.handleRequest(req, res, req.body);
 });
 
-app.listen(PORT, () => {
-  console.log(`guardian-actions MCP listening on http://localhost:${PORT}/mcp  (db: ${DB_PATH})`);
+app.listen(PORT, HOST, () => {
+  console.log(`guardian-actions MCP listening on http://${HOST}:${PORT}/mcp  (db: ${DB_PATH})`);
 });

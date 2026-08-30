@@ -26,5 +26,15 @@ Missing either → `runbook_current: false`.
 ## Reversibility is verified, not asserted
 
 Do not accept "we can roll back" from the runbook text. The subagent runs the `down`
-migrations in the sandbox (PRD §9.7) and checks schema + row-count parity against the
-pre-migration snapshot. Only a passing dry-run sets `migration_reversible: true`.
+migrations in the sandbox (PRD §9.7) and checks **full data parity** against the
+pre-migration snapshot, not just structure:
+
+- schema parity (same tables, columns, types, constraints, indexes), AND
+- **row-content parity**: every affected table must match the snapshot cell-for-cell.
+  Compare complete table contents — e.g. a deterministic `ORDER BY` dump or a per-table
+  checksum (`md5`/`sha256` of the sorted rows). Row *count* alone is not sufficient: a
+  `down` migration that recreates a dropped column with a default restores the count but
+  loses the original values.
+
+Any mismatch → `migration_reversible: false`. Only a dry-run that is identical on schema
+*and* data sets `migration_reversible: true`.
