@@ -14,3 +14,5 @@ data/
 docs/PR0-readiness.md
 NOTES.md
 release-guardian-prd.md
+
+.claude/
