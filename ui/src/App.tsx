@@ -7,8 +7,13 @@ const baseUrl = import.meta.env.VITE_TRUEFORGE_BASE_URL ?? '';
 
 /**
  * Release Guardian console — the TrueForge UI SDK pinned to the release-guardian
- * agent. No theme overrides; the preset carries the chrome. The identity is one
- * top bar plus three slot overrides (CheckLane, GateApprovalBar, SubmitPrompt).
+ * agent. No theme overrides; the preset carries the chrome. app.css re-adds the
+ * form-element reset the SDK's styles.css omits. The identity is one top bar plus
+ * three slot overrides (CheckLane, GateApprovalBar, SubmitPrompt).
+ *
+ * layout="drawer": the sidebar layout leaves a dead gap in single-agent mode, and
+ * drawer gives the run views more room. agentConfig SingleAgent: the default /
+ * AgentLibrary modes render blank on trueforge-ui@0.2.4.
  */
 export default function App() {
   return (

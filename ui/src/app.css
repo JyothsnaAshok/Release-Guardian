@@ -3,6 +3,33 @@ body,
 #root {
   height: 100%;
   margin: 0;
+  overflow: hidden;
+}
+
+/*
+ * The SDK's styles.css ships Tailwind utilities but omits the preflight reset (so
+ * it can't clobber a host app). Without one, its <button>/<input> elements fall
+ * back to the browser's native chrome (embossed borders, inset shadows). Re-apply
+ * the essential form reset — inside @layer base so the SDK's own utility classes
+ * (in @layer utilities) always win, and :where() so specificity stays at zero.
+ */
+@layer base {
+  :where(.rg-body button, .rg-body input, .rg-body select, .rg-body textarea, .rg-body optgroup) {
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+  }
+  :where(.rg-body button, .rg-body [type='button'], .rg-body [type='submit'], .rg-body [type='reset']) {
+    appearance: none;
+    background-color: transparent;
+    background-image: none;
+    border: 0 solid;
+    padding: 0;
+    cursor: pointer;
+  }
+  :where(.rg-body *, .rg-body *::before, .rg-body *::after) {
+    box-sizing: border-box;
+  }
 }
 
 .rg-app {
