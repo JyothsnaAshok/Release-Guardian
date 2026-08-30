@@ -1,0 +1,22 @@
+{
+  "name": "release-guardian",
+  "private": true,
+  "version": "0.2.0",
+  "description": "An agent that decides whether a release is safe to ship — built on TrueForge for the WeMakeDevs Agent Harness hackathon.",
+  "type": "module",
+  "engines": { "node": ">=22.14.0" },
+  "workspaces": ["packages/*", "ui"],
+  "scripts": {
+    "guardian:dev": "npm --workspace packages/guardian-actions run dev",
+    "guardian:start": "npm --workspace packages/guardian-actions run start",
+    "setup:providers": "node --env-file=.env scripts/setup-providers.mjs",
+    "agent:apply": "node --env-file=.env scripts/apply-agent.mjs",
+    "typecheck": "tsc -b --pretty"
+  },
+  "dependencies": {
+    "@truefoundry/trueforge-sdk": "^0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
