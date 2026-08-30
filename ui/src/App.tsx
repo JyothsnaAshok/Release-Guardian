@@ -1,18 +1,14 @@
 import { TrueForgeUI } from '@truefoundry/trueforge-ui';
-import { theme } from './theme';
 import { CheckLane } from './slots/CheckLane';
 import { GateApprovalBar } from './slots/GateApprovalBar';
 import { SubmitPrompt } from './slots/SubmitPrompt';
-import './app.css';
 
 const baseUrl = import.meta.env.VITE_TRUEFORGE_BASE_URL ?? '';
 
 /**
  * Release Guardian console — the TrueForge UI SDK pinned to the release-guardian
- * agent. The SDK's chrome, streaming, history, approval round-trip and MCP-OAuth
- * popups are left as-is; the identity is one top bar and two slot overrides:
- *   CheckLane        — each check as a status lane (the parallel-fan-out view)
- *   GateApprovalBar  — a banner naming the irreversible action at each gate
+ * agent. No theme overrides; the preset carries the chrome. The identity is one
+ * top bar plus three slot overrides (CheckLane, GateApprovalBar, SubmitPrompt).
  */
 export default function App() {
   return (
@@ -26,7 +22,13 @@ export default function App() {
               strokeWidth="1.4"
               strokeLinejoin="round"
             />
-            <path d="M4.7 8.6 6.8 10.8 10.5 6.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+            <path
+              d="M4.7 8.6 6.8 10.8 10.5 6.4"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
         </span>
         <span className="rg-word">Release&nbsp;Guardian</span>
@@ -37,9 +39,9 @@ export default function App() {
       <div className="rg-body">
         <TrueForgeUI
           server={{ type: 'trueforge', baseUrl }}
-          layout="sidebar"
+          layout="drawer"
           agentConfig={{ mode: 'SingleAgent', name: 'release-guardian' }}
-          theme={theme}
+          className="h-full"
           overrides={{
             SubAgentCard: CheckLane,
             ToolApprovalBar: GateApprovalBar,

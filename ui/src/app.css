@@ -1,14 +1,3 @@
-:root {
-  --rg-bar-bg: #0a0a0b;
-  --rg-bar-border: #1e1e22;
-  --rg-word: #f4f4f5;
-  --rg-tag: #8a8a93;
-  --rg-mark: #ea7a3c;
-}
-
-* {
-  box-sizing: border-box;
-}
 html,
 body,
 #root {
@@ -20,7 +9,8 @@ body,
   display: flex;
   flex-direction: column;
   height: 100dvh;
-  background: var(--rg-bar-bg);
+  overflow: hidden;
+  background: #0a0a0b;
 }
 
 .rg-bar {
@@ -30,19 +20,18 @@ body,
   gap: 10px;
   height: 46px;
   padding: 0 18px;
-  background: var(--rg-bar-bg);
-  border-bottom: 1px solid var(--rg-bar-border);
+  border-bottom: 1px solid #1e1e22;
+  color: #f4f4f5;
   font: 500 13.5px/1
     ui-sans-serif, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
 .rg-mark {
   display: inline-flex;
-  color: var(--rg-mark);
+  color: #ea7a3c;
 }
 
 .rg-word {
-  color: var(--rg-word);
   font-weight: 600;
   letter-spacing: -0.012em;
 }
@@ -50,11 +39,11 @@ body,
 .rg-sep {
   width: 1px;
   height: 16px;
-  background: var(--rg-bar-border);
+  background: #2a2a30;
 }
 
 .rg-tag {
-  color: var(--rg-tag);
+  color: #8a8a93;
   font-size: 12px;
   letter-spacing: 0.005em;
 }
@@ -62,6 +51,8 @@ body,
 .rg-body {
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 @media (max-width: 720px) {

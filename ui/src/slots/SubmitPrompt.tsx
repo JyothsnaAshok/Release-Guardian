@@ -25,23 +25,22 @@ export function SubmitPrompt(_props: WelcomeScreenProps) {
       <pre
         style={{
           textAlign: 'left',
-          fontSize: 12,
-          lineHeight: 1.55,
+          fontSize: 11.5,
+          lineHeight: 1.6,
           background: 'var(--card-bg)',
           border: '1px solid var(--border)',
           borderRadius: 'var(--radius, 6px)',
           padding: '10px 12px',
           margin: 0,
-          overflowX: 'auto',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
           color: 'var(--text-primary)',
         }}
       >
 {`Evaluate release candidate "rc-1042".
-Repo owner: JyothsnaAshok
-Repo name: orders-service
-Clone URL: https://github.com/JyothsnaAshok/orders-service.git
-Candidate ref: release/v1.3.0
-Last release tag: v1.2.0`}
+Repo:   JyothsnaAshok/orders-service
+Clone:  https://github.com/JyothsnaAshok/orders-service.git
+Ref:    release/v1.3.0   (base: v1.2.0)`}
       </pre>
     </div>
   );
