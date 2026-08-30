@@ -128,15 +128,16 @@ Run `npm run smoke:e2e` for a full unattended pipeline check.
 > Skills are git-cloned into the sandbox on init, so **`Release-Guardian` must be a
 > public repo** for the Rollback Check's dry-run to run.
 
-## Qodo Code Review Evidence
+## Demo scenarios
 
-<!-- Populated from PR history — links to merged PRs with completed Qodo reviews. -->
+All assume the four servers are running and `npm run agent:haiku` (or `:sonnet`)
+has been applied. Paste a prompt into a fresh **release-guardian** chat.
 
-_See PR history; every substantive change went through a reviewed pull request._
+### 1 · GO — clean release, real email goes out
 
-1 · GO — clean release, real email goes out
-Setup: MOCK_SCENARIO=clear (default). Target date is clear of the freeze.
+`PAGERDUTY_SCENARIO=clear` (default); target date clear of the freeze.
 
+```
 Evaluate this release candidate.
 
 Repo: https://github.com/JyothsnaAshok/orders-service
@@ -144,11 +145,17 @@ Candidate ref: release/v1.4.0
 Previous release: v1.2.0
 Target deploy: 2026-09-15T14:00:00Z
 Candidate id: rc-1401
-Expect: Freeze PASS · Readiness PASS · Rollback PASS (0003_add_priority reverses cleanly, ROLLBACK.md current) → GO → approve at Gate 1 → Comms card → Allow at Gate 2 → real Gmail to jyothsna1809@gmail.com.
+```
 
-2 · NO-GO — calendar freeze
-Setup: MOCK_SCENARIO=clear. Deploying today hits the real FREEZE: event.
+Freeze PASS · Readiness PASS · Rollback PASS (`0003_add_priority` reverses cleanly,
+`ROLLBACK.md` current) → **GO** → approve at Gate 1 → *draft the email?* → email
+preview → **Allow** at Gate 2 → real Gmail to jyothsna1809@gmail.com.
 
+### 2 · NO-GO — calendar freeze
+
+`PAGERDUTY_SCENARIO=clear`. Deploying today hits the real `FREEZE:` event.
+
+```
 Evaluate this release candidate.
 
 Repo: https://github.com/JyothsnaAshok/orders-service
@@ -156,11 +163,16 @@ Candidate ref: release/v1.4.0
 Previous release: v1.2.0
 Deploy now
 Candidate id: rc-1402
-Expect: Freeze BLOCKED (FREEZE: production change freeze overlaps the window) → NO-GO → schedule_recheck → asks whether to close the candidate. No comms.
+```
 
-3 · NO-GO — irreversible migration
-Setup: MOCK_SCENARIO=clear. Date clear of freeze so the migration is the sole blocker.
+Freeze **BLOCKED** → **NO-GO** → `schedule_recheck` → asks whether to close the
+candidate. No email.
 
+### 3 · NO-GO — irreversible migration
+
+`PAGERDUTY_SCENARIO=clear`; date clear of the freeze so the migration is the sole blocker.
+
+```
 Evaluate this release candidate.
 
 Repo: https://github.com/JyothsnaAshok/orders-service
@@ -168,11 +180,17 @@ Candidate ref: release/v1.3.0
 Previous release: v1.2.0
 Target deploy: 2026-09-15T14:00:00Z
 Candidate id: rc-1301
-Expect: sandbox runs migrate.mjs verify-rollback → exits 1 (0003_drop_status_column's down recreates the column but loses shipped/refunded values) → migration_reversible: false → NO-GO. failing_migration names it; runbook also missing (listed as a concern).
+```
 
-4 · NO-GO — pure-code release that can't roll back
-Setup: MOCK_SCENARIO=clear.
+Sandbox runs `migrate.mjs verify-rollback` → exit 1 (`0003_drop_status_column`'s
+down recreates the column but loses shipped/refunded values) →
+`migration_reversible: false` → **NO-GO**. `failing_migration` names it.
 
+### 4 · NO-GO — pure-code release that can't roll back
+
+`PAGERDUTY_SCENARIO=clear`.
+
+```
 Evaluate this release candidate.
 
 Repo: https://github.com/JyothsnaAshok/checkout-api
@@ -180,11 +198,19 @@ Candidate ref: release/v2.1.0
 Previous release: v2.0.0
 Target deploy: 2026-09-15T14:00:00Z
 Candidate id: rc-2101
-Expect: Readiness PASS (CI green, no migration) — but the sandbox runs scripts/verify-rollback.mjs → fails (v2.0.0's reader can't parse the new v2 state file) → migration_reversible: false → NO-GO. Shows a green-CI release still being blocked because rollback was executed, not assumed.
+```
 
-5 · NO-GO — active production incident
-Setup: restart mocks as MOCK_SCENARIO=incident npm run mocks:dev. Future date so it's an incident-readiness block, not a freeze.
+Readiness PASS (CI green, no migration) — but the sandbox runs
+`scripts/verify-rollback.mjs` → fails (v2.0.0's reader can't parse the new v2 state
+file) → `migration_reversible: false` → **NO-GO**. A green-CI release blocked
+because rollback was *executed*, not assumed.
 
+### 5 · NO-GO — active production incident
+
+Restart the mock as `PAGERDUTY_SCENARIO=incident npm run pagerduty:dev`. Future
+date so it's an incident-readiness block, not a freeze.
+
+```
 Evaluate this release candidate.
 
 Repo: https://github.com/JyothsnaAshok/orders-service
@@ -192,19 +218,29 @@ Candidate ref: release/v1.4.0
 Previous release: v1.2.0
 Target deploy: 2026-09-15T14:00:00Z
 Candidate id: rc-1403
-Expect: Readiness BLOCKED — open_incidents: ["PD-1042 …"] (triggered, high urgency) → NO-GO. Switch mocks back to clear afterward.
+```
 
-6 · CONDITIONAL GO — concern accepted by a human
-No fixture forces this on its own, so trigger it one of two ways:
+Readiness **BLOCKED** — `open_incidents: ["PD-1042 …"]` → **NO-GO**. Switch the mock
+back to `clear` afterward.
 
-Human override: run prompt 1, then at Gate 1 answer "Override to conditional_go". Both comms messages then state the concern + that a human accepted it.
-Natural trigger: on a branch off release/v1.4.0 with ROLLBACK.md deleted → Rollback returns reversible-but-runbook_current: false → capped at CONDITIONAL GO at Gate 1.
+### 6 · CONDITIONAL GO — concern accepted by a human
 
-# Repo / ref MOCK_SCENARIO Deploy Outcome
+No fixture forces this alone. Either run scenario 1 and answer **"Override to
+conditional_go"** at Gate 1, or point at a branch off `release/v1.4.0` with
+`ROLLBACK.md` deleted (→ reversible but `runbook_current: false` → capped at
+CONDITIONAL GO). The email then states the concern and that a human accepted it.
 
-1 orders-service release/v1.4.0 clear 2026-09-15 GO + real email
-2 orders-service release/v1.4.0 clear now NO-GO (freeze)
-3 orders-service release/v1.3.0 clear 2026-09-15 NO-GO (migration)
-4 checkout-api release/v2.1.0 clear 2026-09-15 NO-GO (rollback)
-5 orders-service release/v1.4.0 incident 2026-09-15 NO-GO (incident)
-6 prompt 1 + Gate-1 override clear 2026-09-15 CONDITIONAL GO
+| # | Repo / ref | `PAGERDUTY_SCENARIO` | Deploy | Outcome |
+| --- | --- | --- | --- | --- |
+| 1 | orders-service `release/v1.4.0` | clear | 2026-09-15 | GO + real email |
+| 2 | orders-service `release/v1.4.0` | clear | now | NO-GO (freeze) |
+| 3 | orders-service `release/v1.3.0` | clear | 2026-09-15 | NO-GO (migration) |
+| 4 | checkout-api `release/v2.1.0` | clear | 2026-09-15 | NO-GO (rollback) |
+| 5 | orders-service `release/v1.4.0` | incident | 2026-09-15 | NO-GO (incident) |
+| 6 | scenario 1 + Gate-1 override | clear | 2026-09-15 | CONDITIONAL GO |
+
+## Qodo Code Review Evidence
+
+<!-- Populated from PR history — links to merged PRs with completed Qodo reviews. -->
+
+_See PR history; every substantive change went through a reviewed pull request._
