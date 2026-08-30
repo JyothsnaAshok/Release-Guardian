@@ -60,11 +60,12 @@ The agent analyses real GitHub repos, not fixtures:
 
 | Repo | Case | Candidate branch |
 | --- | --- | --- |
-| [`orders-service`](https://github.com/JyothsnaAshok/orders-service) | SQL migration — `0003` drops a column with live data and cannot be faithfully reversed | `release/v1.3.0` vs tag `v1.2.0` |
-| [`checkout-api`](https://github.com/JyothsnaAshok/checkout-api) | Pure code — persisted-state format moves to `v2`; the upgrade is safe and CI is green, but a rollback strands the service | `release/v2.1.0` vs tag `v2.0.0` |
+| [`orders-service`](https://github.com/JyothsnaAshok/orders-service) `release/v1.3.0` | SQL migration — `0003` drops a column with live data and cannot be faithfully reversed → **NO-GO** | vs tag `v1.2.0` |
+| [`orders-service`](https://github.com/JyothsnaAshok/orders-service) `release/v1.4.0` | Clean release — reversible migration + a current rollback runbook → **GO**, drafts comms, Gate 2 | vs tag `v1.2.0` |
+| [`checkout-api`](https://github.com/JyothsnaAshok/checkout-api) `release/v2.1.0` | Pure code — persisted-state format moves to `v2`; the upgrade is safe and CI is green, but a rollback strands the service → **NO-GO** | vs tag `v2.0.0` |
 
-CI is green on both — a human would ship them. The Rollback Check is what catches that
-they can't be undone.
+CI is green on all three — a human would ship them. On `v1.3.0` / `v2.1.0` the
+Rollback Check is what catches that they can't be undone.
 
 The GitHub connector is registered as two MCP servers (`github` for repo/commit/PR
 reads, `github-actions` for CI status — GitHub's remote MCP splits the actions toolset
