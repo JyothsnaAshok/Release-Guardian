@@ -15,6 +15,10 @@
     "agent:apply": "node --env-file=.env scripts/apply-agent.mjs",
     "smoke:freeze": "node --env-file=.env scripts/smoke-freeze.mjs",
     "smoke:readiness": "node --env-file=.env scripts/smoke-readiness.mjs",
+    "smoke:rollback": "node --env-file=.env scripts/smoke-rollback.mjs",
+    "smoke:e2e": "node --env-file=.env scripts/smoke-e2e.mjs",
+    "ui:dev": "npm --workspace ui run dev",
+    "ui:build": "npm --workspace ui run build",
     "typecheck": "tsc -b --pretty"
   },
   "dependencies": {
@@ -22,5 +26,8 @@
   },
   "devDependencies": {
     "typescript": "^5.6.3"
+  },
+  "overrides": {
+    "zustand": "^5.0.15"
   }
 }

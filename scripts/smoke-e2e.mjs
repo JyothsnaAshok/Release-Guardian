@@ -80,6 +80,7 @@ const decision = hist2.release_decisions?.at(-1);
 const rollbackCheck = (hist2.checks ?? []).reverse().find((c) => c.kind === 'rollback')?.result ?? {};
 console.log('\nrelease decision:', JSON.stringify(decision));
 console.log('rollback check:', JSON.stringify(rollbackCheck));
+console.log('gate 2 reached after approval:', gate2Fired, '(expected only when decision is go/conditional_go)');
 
 // The rollback subagent either runs the sandbox dry-run and catches the
 // irreversible migration (migration_reversible=false), or — if the sandbox can't

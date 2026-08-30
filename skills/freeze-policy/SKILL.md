@@ -24,8 +24,10 @@ A release is **in freeze** if any of these is true:
    `summary` starts with `FREEZE:` overlaps the next 60 minutes.
 2. **Incident freeze** — `pagerduty_list_incidents` returns any incident with
    `urgency: "high"` and `status` of `triggered` or `acknowledged` (i.e. not resolved).
-3. **Weekend freeze** — the current time is between Fri 16:00 and Mon 09:00 in the
-   on-call user's implied timezone (use UTC if unknown).
+
+Blackout windows (weekends, holidays) are expressed as `FREEZE:` calendar events by
+whoever owns the release calendar — they are covered by rule 1, so do not apply a
+separate day-of-week rule here.
 
 ## Concurrent-deploy conflict
 
@@ -58,4 +60,4 @@ so this is calendar-only for now.
 - `reasons` / `conflicting_deploys` are `[]` when the lookup succeeded and found nothing,
   and `null` (plus listed in `unknown_fields`) when the lookup failed. When `in_freeze`
   is `true`, `reasons` has one human-readable string per triggered rule, prefixed with
-  the rule name (`calendar_freeze`, `incident_freeze`, `weekend_freeze`).
+  the rule name (`calendar_freeze`, `incident_freeze`).
