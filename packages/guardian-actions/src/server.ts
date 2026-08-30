@@ -107,6 +107,14 @@ function buildServer(): McpServer {
       // field (array-or-null, where null means the list lookup failed), is
       // declared unknown here regardless.
       const data = parsed.data as Record<string, unknown>;
+      const fieldNames = Object.keys(data);
+      const strayNames = unknown_fields.filter((f) => !fieldNames.includes(f));
+      if (strayNames.length > 0) {
+        return ok({
+          saved: false,
+          error: `unknown_fields may only name actual ${kind} result fields; not: ${strayNames.join(', ')}`,
+        });
+      }
       const unknownValued = Object.entries(data)
         .filter(([, v]) => v === 'unknown')
         .map(([k]) => k);
@@ -119,6 +127,34 @@ function buildServer(): McpServer {
         return ok({ saved: true, kind, result: parsed.data, unknown_fields: declaredUnknown });
       });
     },
+  );
+
+  server.registerTool(
+    'save_risk_score',
+    {
+      title: 'Save the computed RiskScore (Code Mode aggregation output)',
+      description:
+        'Persist the aggregated RiskScore produced by the Code Mode step, BEFORE rendering the decision card and calling commit_release_decision. Not human-gated — computing a score is not an irreversible action.',
+      inputSchema: {
+        candidate_id: z.string(),
+        score: z
+          .object({
+            decision: z.enum(['go', 'conditional_go', 'no_go']),
+            blockers: z.array(z.string()),
+            concerns: z.array(z.string()),
+            unknowns: z.array(z.string()),
+            summary: z.string(),
+          })
+          .strict(),
+        computed_by: z.string().describe('Model FQN(s) that computed this score'),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    },
+    async ({ candidate_id, score, computed_by }) =>
+      guarded(() => {
+        store.saveRiskScore({ candidate_id, score, computed_by });
+        return ok({ saved: true, score });
+      }),
   );
 
   server.registerTool(

@@ -55,6 +55,27 @@ export const CHECK_SCHEMAS = {
   rollback: RollbackCheckResult,
 } as const;
 
+/**
+ * Output of the Code Mode aggregation step (PRD §7): the three structured check
+ * results reduced to one decision by counts + rules, not prose.
+ *
+ * - `blockers`  — conditions that force `no_go` (in freeze, tests failing, migration
+ *   not reversible, open incident, no prior artifact).
+ * - `concerns`  — conditions that downgrade `go` to `conditional_go` but do not block
+ *   (e.g. rollback runbook stale).
+ * - `unknowns`  — headline/evidence fields a check could not determine; any unknown
+ *   caps the outcome at `conditional_go` (we cannot assert "safe").
+ */
+export const RiskScore = z
+  .object({
+    decision: z.enum(['go', 'conditional_go', 'no_go']),
+    blockers: z.array(z.string()),
+    concerns: z.array(z.string()),
+    unknowns: z.array(z.string()),
+    summary: z.string(),
+  })
+  .strict();
+
 export type CheckKind = keyof typeof CHECK_SCHEMAS;
 
 /** Headline field per kind — must not be missing, may be `"unknown"`. */

@@ -87,6 +87,12 @@ CREATE TABLE IF NOT EXISTS release_decision (
   actor           TEXT NOT NULL,
   decided_at      TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS risk_score (
+  candidate_id TEXT NOT NULL REFERENCES release_candidate(id),
+  score_json   TEXT NOT NULL,
+  computed_by  TEXT NOT NULL,
+  computed_at  TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS comms_draft (
   candidate_id TEXT NOT NULL REFERENCES release_candidate(id),
   channel      TEXT NOT NULL,
@@ -258,6 +264,23 @@ export class Store {
     }));
   }
 
+  /** Persist a computed RiskScore (the Code Mode aggregation output), before Gate 1. */
+  saveRiskScore(input: { candidate_id: string; score: unknown; computed_by: string }): void {
+    this.requireCandidate(input.candidate_id);
+    this.db
+      .prepare(
+        'INSERT INTO risk_score (candidate_id, score_json, computed_by, computed_at) VALUES (?, ?, ?, ?)',
+      )
+      .run(input.candidate_id, JSON.stringify(input.score ?? null), input.computed_by, this.now());
+  }
+
+  listRiskScores(candidateId: string): Array<{ score: unknown; computed_by: string; computed_at: string }> {
+    const rows = this.db
+      .prepare('SELECT score_json, computed_by, computed_at FROM risk_score WHERE candidate_id = ? ORDER BY computed_at ASC')
+      .all(candidateId) as Array<{ score_json: string; computed_by: string; computed_at: string }>;
+    return rows.map((r) => ({ score: JSON.parse(r.score_json), computed_by: r.computed_by, computed_at: r.computed_at }));
+  }
+
   saveCommsDraft(input: {
     candidate_id: string;
     channel: string;
@@ -317,6 +340,7 @@ export class Store {
     return {
       candidate: this.getCandidate(candidateId),
       checks: this.listCheckResults(candidateId),
+      risk_scores: this.listRiskScores(candidateId),
       decisions: this.listDecisions(candidateId),
       release_decisions: this.listReleaseDecisions(candidateId),
       schedule_id: this.getScheduleLink(candidateId),
