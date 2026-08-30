@@ -64,6 +64,16 @@ export function calendarEvents(): CalendarEvent[] {
       all_day: false,
     },
     {
+      // Always present — lets a "deploy in ~8 days" demo hit a freeze without a
+      // freeze being active right now.
+      id: 'evt-freeze-board-week',
+      summary: 'FREEZE: quarterly board meeting week — no deploys',
+      start: { date: iso(now + 7 * DAY).slice(0, 10) },
+      end: { date: iso(now + 10 * DAY).slice(0, 10) },
+      calendar: 'Release Freezes',
+      all_day: true,
+    },
+    {
       id: 'evt-freeze-holiday',
       summary: 'FREEZE: year-end change freeze',
       start: { date: iso(now + 90 * DAY).slice(0, 10) },
