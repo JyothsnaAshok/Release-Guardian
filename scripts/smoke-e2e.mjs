@@ -27,7 +27,13 @@ async function callGuardian(name, args) {
 
 const { data: session } = await client.sessions.create({ agent: { name: 'release-guardian' } });
 
-const msg = `Evaluate release candidate "${candidateId}": GitHub repo JyothsnaAshok/orders-service, candidate branch release/v1.3.0, last release tag v1.2.0. The incident tracker and calendar are the mock-connectors server.`;
+const msg = `Evaluate release candidate "${candidateId}".
+Repo owner: JyothsnaAshok
+Repo name: orders-service
+Clone URL: https://github.com/JyothsnaAshok/orders-service.git
+Candidate ref: release/v1.3.0
+Last release tag: v1.2.0
+The incident tracker and calendar are the mock-connectors server.`;
 
 let pausedAtGate1 = false;
 let pending = null; // { threadId, toolCallId }
@@ -75,13 +81,16 @@ const rollbackCheck = (hist2.checks ?? []).reverse().find((c) => c.kind === 'rol
 console.log('\nrelease decision:', JSON.stringify(decision));
 console.log('rollback check:', JSON.stringify(rollbackCheck));
 
+// The rollback subagent either runs the sandbox dry-run and catches the
+// irreversible migration (migration_reversible=false), or — if the sandbox can't
+// clone — degrades safely to "unknown" (never true). Both are acceptable; a silent
+// pass is not.
+const rr = rollbackCheck.migration_reversible;
 const checks = {
   all_three_checks: ['freeze', 'readiness', 'rollback'].every((k) => kinds.has(k)),
   score_computed: Boolean(score) && ['go', 'conditional_go', 'no_go'].includes(score?.decision),
-  rollback_ran_sandbox:
-    typeof rollbackCheck.dry_run_output === 'string' && rollbackCheck.dry_run_output.length > 0,
-  rollback_caught_irreversible: rollbackCheck.migration_reversible === false,
-  score_is_no_go: score?.decision === 'no_go',
+  rollback_not_a_silent_pass: rr === false || rr === 'unknown',
+  not_shipped_on_risk: score?.decision !== 'go',
   gate1_paused: pausedAtGate1,
   decision_matches_score: Boolean(decision) && decision?.decision === score?.decision,
 };

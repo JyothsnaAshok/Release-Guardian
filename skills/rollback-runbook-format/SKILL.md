@@ -15,17 +15,26 @@ undone if it went wrong. Verify by executing, not by reading that something exis
 
 ## 1. prior_artifact_exists
 
-The base ref is the last release (a tag). `github.list_tags` (or `get_release_by_tag`)
-for the repo — does the base tag exist and resolve to a commit? true / false /
-"unknown" if the lookup errored.
+The base ref is the last release (a tag). Call `github.list_tags` with the exact
+`owner` and `repo` (they are given to you — do not guess). If the base tag name
+appears in the list => `true`. If the list is returned and the tag is absent =>
+`false`. Only `"unknown"` if the call itself errored. (In the sandbox clone,
+`git tag --list` is a second confirmation.)
 
 ## 2. migration_reversible — the sandbox dry-run
 
-In the sandbox:
+The demo repos are **public** — clone over HTTPS with no credentials. Set
+`GIT_TERMINAL_PROMPT=0` so a missing network fails fast instead of hanging on a
+credential prompt. In the sandbox:
 
 ```
-git clone <repo-clone-url> /work && cd /work && git checkout <candidate-ref>
+rm -rf /work
+GIT_TERMINAL_PROMPT=0 git clone --depth 50 https://github.com/<owner>/<repo>.git /work
+cd /work && git checkout <candidate-ref>
 ```
+
+If the clone command exits non-zero, the dry-run could not run — go straight to the
+`"unknown"` path below; do not analyse the diff by hand and guess.
 
 Then, depending on the repo:
 
