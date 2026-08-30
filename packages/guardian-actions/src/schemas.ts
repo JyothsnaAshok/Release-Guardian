@@ -46,6 +46,13 @@ export const RollbackCheckResult = z
     failing_migration: z.string().nullable(),
     flags_default_safe: tri,
     runbook_current: tri,
+    /**
+     * Verbatim stdout/stderr tail of the sandbox `verify-rollback` run. Required
+     * whenever `migration_reversible` is a boolean — the reversibility verdict is
+     * only valid with the execution evidence behind it. `null` only when
+     * `migration_reversible` is `"unknown"` (the dry-run could not be executed).
+     */
+    dry_run_output: z.string().nullable(),
   })
   .strict();
 

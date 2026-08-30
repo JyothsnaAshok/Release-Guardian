@@ -34,9 +34,16 @@ Then, depending on the repo:
 - **Code / persisted-state** (`scripts/verify-rollback.mjs` present, no migrations):
   `npm ci --omit=dev 2>/dev/null || true; npm run verify-rollback`
 
+You MUST actually run these in the sandbox — do not assume an outcome. Capture the
+last ~40 lines of combined stdout/stderr; that goes verbatim into `dry_run_output`
+and `save_check_result` will reject a boolean `migration_reversible` without it.
+
 Exit code `0` => `migration_reversible: true`. Non-zero => `false`, and put the
 failing migration name or the reason from stdout into `failing_migration`. If the
-clone or the command cannot run at all => `"unknown"` and name it in unknown_fields.
+clone or the command genuinely cannot run (no sandbox, clone fails, toolchain
+missing) => `migration_reversible: "unknown"`, `dry_run_output: null`, and name
+`migration_reversible` in unknown_fields. Never report `true` because you could not
+run it.
 
 `verify-rollback` already enforces full parity — schema **and** row-content (a `down`
 that recreates a dropped column with a default restores the row count but loses the
@@ -68,10 +75,12 @@ statement; feature-flag names + safe defaults; the on-call escalation path.
   "migration_reversible": false,
   "failing_migration": "0003_drop_status_column (row-content parity failed: status values lost)",
   "flags_default_safe": true,
-  "runbook_current": false
+  "runbook_current": false,
+  "dry_run_output": "> node scripts/migrate.mjs verify-rollback ...\nLOSS: migration 0003 does not reverse cleanly.\n..."
 }
 ```
 
-All five fields required. Use `"unknown"` (never `false`) for any check whose lookup
+All six fields required. Use `"unknown"` (never `false`) for any check whose lookup
 or dry-run could not run, and name it in `unknown_fields`. `failing_migration` is
-`null` when `migration_reversible` is `true`.
+`null` when `migration_reversible` is `true`; `dry_run_output` is `null` only when
+`migration_reversible` is `"unknown"`.

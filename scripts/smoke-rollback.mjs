@@ -54,8 +54,10 @@ const instructions = `You are running the Rollback Check for release candidate "
    migration / reason from stdout into failing_migration. If the sandbox steps cannot
    run at all => "unknown" and name it in unknown_fields.
 6. guardian-actions.save_check_result, kind "rollback", result:
-   { prior_artifact_exists, migration_reversible, failing_migration, flags_default_safe, runbook_current }.
-   failing_migration is null when migration_reversible is true.
+   { prior_artifact_exists, migration_reversible, failing_migration, flags_default_safe,
+     runbook_current, dry_run_output }.
+   dry_run_output is the last ~40 lines of the verify-rollback output, verbatim (required
+   whenever migration_reversible is a boolean). failing_migration is null when reversible.
 7. Reply with the JSON you saved.`;
 
 const { data: session } = await client.sessions.create({
@@ -103,6 +105,7 @@ const checks = {
   persisted: Boolean(rollback),
   not_reversible: r.migration_reversible === false,
   named_failure: typeof r.failing_migration === 'string' && r.failing_migration.length > 0,
+  has_dry_run_evidence: typeof r.dry_run_output === 'string' && r.dry_run_output.length > 0,
   prior_artifact: r.prior_artifact_exists === true,
 };
 const pass = Object.values(checks).every(Boolean);

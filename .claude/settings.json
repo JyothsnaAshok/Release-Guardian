@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/jyothsnaashok/Desktop/checkout-api/**)",
+      "Bash(node --test)",
+      "Bash(node scripts/verify-rollback.mjs)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(node -e 's=require\\(\"./docs/openapi.json\"\\);for\\(const n of [\"MCPServerHeaderAuth\",\"MCPServerDcrAuth\"]\\)console.log\\(n,JSON.stringify\\(s.components.schemas[n]\\)\\)')",
+      "Bash(git commit -q -m ' *)",
+      "Bash(git rebase *)",
+      "Bash(git merge *)",
+      "Read(//opt/homebrew/Cellar/gh/2.98.0/bin/**)",
+      "Bash(command -v gh)",
+      "Bash(gh --version)",
+      "Bash(gh pr *)",
+      "Bash(python3 -c \"import json; json.load\\(open\\('agents/release-guardian.json'\\)\\); print\\('manifest json ok'\\)\")",
+      "Bash(node --check scripts/smoke-readiness.mjs)",
+      "Bash(git reset *)",
+      "Bash(git --no-pager diff --cached --stat)",
+      "Bash(gh api *)",
+      "Bash(python3 -c ' *)",
+      "Bash(gh repo *)",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('agents/release-guardian.json','utf8'\\)\\);console.log\\('json ok'\\)\")",
+      "Bash(node --check scripts/smoke-rollback.mjs)",
+      "Bash(SMOKE_CASE=sql node --env-file=.env scripts/smoke-rollback.mjs)",
+      "Bash(pkill -f \"guardian-actions/dist\")",
+      "Bash(node --check scripts/smoke-e2e.mjs)",
+      "Bash(pkill -f \"mock-connectors/dist\")",
+      "Bash(SKILLS_REPO_REF=pr4-core-pipeline node --env-file=.env scripts/setup-providers.mjs)",
+      "Bash(node --env-file=.env scripts/smoke-e2e.mjs)",
+      "Bash(git commit *)"
+    ],
+    "additionalDirectories": [
+      "/Users/jyothsnaashok/Desktop/checkout-api/src",
+      "/Users/jyothsnaashok/Desktop/checkout-api/.github/workflows",
+      "/Users/jyothsnaashok/Desktop/orders-service/src"
+    ]
+  }
+}

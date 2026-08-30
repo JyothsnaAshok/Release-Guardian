@@ -115,6 +115,22 @@ function buildServer(): McpServer {
           error: `unknown_fields may only name actual ${kind} result fields; not: ${strayNames.join(', ')}`,
         });
       }
+      // The Rollback Check's reversibility verdict is only valid with the
+      // execution evidence behind it — a boolean migration_reversible must carry
+      // the verify-rollback output, so the subagent cannot assert a value it
+      // never ran (PRD §7.1 / G2).
+      if (
+        kind === 'rollback' &&
+        typeof data.migration_reversible === 'boolean' &&
+        (data.dry_run_output == null || String(data.dry_run_output).trim() === '')
+      ) {
+        return ok({
+          saved: false,
+          error:
+            'migration_reversible is a boolean but dry_run_output is empty — include the verbatim verify-rollback output, or set migration_reversible to "unknown" if the dry-run could not run',
+        });
+      }
+
       const unknownValued = Object.entries(data)
         .filter(([, v]) => v === 'unknown')
         .map(([k]) => k);
