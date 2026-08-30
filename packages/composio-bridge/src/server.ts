@@ -36,7 +36,7 @@ function buildServer(): McpServer {
     {
       title: 'List calendar events in a window (real Google Calendar via Composio)',
       description:
-        'Google Calendar events.list for the window [time_min, time_max]. Freeze windows are events whose summary starts with "FREEZE:". Returns the raw Composio result; read events[].summary / start / end.',
+        'Google Calendar events.list for the window [time_min, time_max], all pages followed. Freeze windows are events whose summary starts with "FREEZE:". Returns a top-level events[] array (read events[].summary / start / end); `result` is the last raw page. Returns an error if the window is too large to page fully.',
       inputSchema: {
         time_min: z.string().describe('ISO-8601 lower bound').optional(),
         time_max: z.string().describe('ISO-8601 upper bound').optional(),
@@ -45,16 +45,52 @@ function buildServer(): McpServer {
     },
     async ({ time_min, time_max }) => {
       try {
-        const res = await execTool('GOOGLECALENDAR_EVENTS_LIST', {
-          calendar_id: CALENDAR_ID,
-          timeMin: time_min,
-          timeMax: time_max,
-          single_events: true,
-          order_by: 'startTime',
-          max_results: 50,
+        // GOOGLECALENDAR_EVENTS_LIST mirrors the Google Calendar events.list query
+        // params, which are camelCase. Follow nextPageToken to completion so a
+        // FREEZE: event past the first page in a busy window is never dropped.
+        const PAGE_SIZE = 250;
+        const MAX_PAGES = 40; // hard ceiling so a pathological calendar can't loop forever
+        const events: unknown[] = [];
+        let pageToken: string | undefined;
+        let pages = 0;
+        let last: unknown;
+
+        do {
+          const res = await execTool('GOOGLECALENDAR_EVENTS_LIST', {
+            calendarId: CALENDAR_ID,
+            timeMin: time_min,
+            timeMax: time_max,
+            singleEvents: true,
+            orderBy: 'startTime',
+            maxResults: PAGE_SIZE,
+            ...(pageToken ? { pageToken } : {}),
+          });
+          if (!res.successful) return fail(res.error ?? 'calendar lookup failed');
+
+          const data = (res.data ?? {}) as Record<string, unknown>;
+          const items = (data.items ?? data.events ?? []) as unknown[];
+          if (Array.isArray(items)) events.push(...items);
+          last = res.data;
+          pageToken = (data.nextPageToken ?? data.next_page_token) as string | undefined;
+          pages += 1;
+        } while (pageToken && pages < MAX_PAGES);
+
+        if (pageToken) {
+          // Still more pages than our ceiling — report incomplete rather than
+          // letting the freeze check silently pass on a partial window.
+          return fail(
+            `calendar window has more than ${PAGE_SIZE * MAX_PAGES} events; result is incomplete — narrow the window`,
+          );
+        }
+
+        return ok({
+          source: 'google-calendar',
+          user_id: COMPOSIO_USER_ID,
+          pages,
+          event_count: events.length,
+          events,
+          result: last,
         });
-        if (!res.successful) return fail(res.error ?? 'calendar lookup failed');
-        return ok({ source: 'google-calendar', user_id: COMPOSIO_USER_ID, result: res.data });
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
       }

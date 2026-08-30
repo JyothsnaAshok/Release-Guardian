@@ -4,7 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { Store, UnknownCandidateError } from "./store.js";
 import { CHECK_SCHEMAS, HEADLINE_FIELD, EVIDENCE_FIELDS } from "./schemas.js";
-import { sendGmail, gmailEnabled } from "./composio.js";
+import { sendGmail, gmailEnabled, GmailNotConfiguredError } from "./composio.js";
 
 /**
  * guardian-actions — the first-party MCP server for Release Guardian (PRD §9.6).
@@ -331,6 +331,12 @@ function buildServer(): McpServer {
         subject: z.string().min(1).describe("Email subject line"),
         body: z.string().min(1).describe("Final email body, post-edit (plain text)"),
         email_to: z.string().default("jyothsna1809@gmail.com"),
+        resend: z
+          .boolean()
+          .default(false)
+          .describe(
+            "Set true only to deliberately re-send after a confirmed non-delivery. Default false makes the call idempotent per candidate.",
+          ),
       },
       annotations: {
         readOnlyHint: false,
@@ -338,13 +344,47 @@ function buildServer(): McpServer {
         idempotentHint: false,
       },
     },
-    async ({ candidate_id, subject, body, email_to }) => {
+    async ({ candidate_id, subject, body, email_to, resend }) => {
       // Candidate must exist before we send anything real.
+      let candidate;
       try {
-        store.requireCandidate(candidate_id);
+        candidate = store.requireCandidate(candidate_id);
       } catch (err) {
         if (err instanceof UnknownCandidateError) return fail(err.message);
         throw err;
+      }
+
+      // Gate 1 invariant: harness Allow/Deny authorizes the send action, but it
+      // does not prove the candidate passed Gate 1. Enforce it at the side-effect
+      // boundary — a real release email only goes out for an approved go /
+      // conditional_go candidate.
+      const release = store.latestReleaseDecision(candidate_id);
+      if (!release || (release.decision !== "go" && release.decision !== "conditional_go")) {
+        return fail(
+          `send_comms requires a committed go or conditional_go Gate 1 decision for ${candidate_id}; current: ${
+            release ? release.decision : "no decision committed"
+          }`,
+        );
+      }
+      if (candidate.status !== "approved") {
+        return fail(
+          `send_comms requires candidate status "approved"; ${candidate_id} is "${candidate.status}"`,
+        );
+      }
+
+      // Idempotency: one release email per candidate unless an operator explicitly
+      // asks to re-send. Guards against a duplicate delivery when a prior call's
+      // provider response was lost after the mail actually went out.
+      const priorEmail = store
+        .listCommsDeliveries(candidate_id)
+        .filter((d) => d.channel === "email");
+      if (priorEmail.length > 0 && !resend) {
+        return ok({
+          sent: false,
+          already_sent: true,
+          note: "a release email was already recorded for this candidate; pass resend=true to send again",
+          deliveries: priorEmail,
+        });
       }
 
       let emailDelivery;
@@ -357,6 +397,7 @@ function buildServer(): McpServer {
           mode: g.mode,
         };
       } catch (err) {
+        if (err instanceof GmailNotConfiguredError) return fail(err.message);
         return fail(
           `email send failed: ${err instanceof Error ? err.message : String(err)}`,
         );
@@ -365,7 +406,7 @@ function buildServer(): McpServer {
       return guarded(() => {
         store.saveCommsDrafts({
           candidate_id,
-          status: "sent",
+          status: emailDelivery.mode === "mock" ? "mock_sent" : "sent",
           drafts: [{ channel: "email", content: `${subject}\n\n${body}` }],
         });
         const { sent_at } = store.recordCommsSend({
@@ -386,7 +427,9 @@ function buildServer(): McpServer {
           reason: null,
         });
         return ok({
-          sent: true,
+          sent: emailDelivery.mode === "gmail",
+          mock: emailDelivery.mode === "mock",
+          status: emailDelivery.mode === "mock" ? "mock_sent" : "sent",
           sent_at,
           email_channel: emailDelivery.mode,
           delivery: emailDelivery,

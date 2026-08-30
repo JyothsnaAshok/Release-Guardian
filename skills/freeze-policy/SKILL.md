@@ -17,9 +17,11 @@ Every overlap check below is against this window — not "right now".
 ## Tools
 
 - `calendar_list_events` (the **`composio`** server — real Google Calendar) — call with
-  `time_min` = `T`, `time_max` = `T + 2h`. The result is the raw Composio payload; the
-  events are under `result.items` (or `result.events`), each with `summary`, `start`,
-  `end`. A freeze is any event whose `summary` starts with `FREEZE:`.
+  `time_min` = `T`, `time_max` = `T + 2h`. The response has a top-level `events` array
+  (every page already followed and merged), each with `summary`, `start`, `end`; `result`
+  holds the last raw Composio page for reference. A freeze is any event whose `summary`
+  starts with `FREEZE:`. If the call returns `error` (including the "result is incomplete"
+  guard), set `in_freeze` to `"unknown"` and list it — never fall back to `false`.
 - `pagerduty_list_incidents` (the **`pagerduty`** server) — active incidents.
 - `pagerduty_list_oncalls` (the **`pagerduty`** server) — for the `oncall` field.
 

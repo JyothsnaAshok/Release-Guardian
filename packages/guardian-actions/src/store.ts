@@ -12,6 +12,9 @@ import { dirname } from 'node:path';
 
 export type CheckKind = 'freeze' | 'readiness' | 'rollback';
 
+/** `mock_sent` records an offline mock dispatch — deliberately distinct from a real `sent`. */
+export type CommsDraftStatus = 'draft' | 'ready_to_send' | 'sent' | 'mock_sent';
+
 export interface ReleaseCandidate {
   id: string;
   ref: string;
@@ -128,6 +131,22 @@ export class Store {
     // SQLite ignores REFERENCES clauses unless this is enabled per-connection.
     this.db.pragma('foreign_keys = ON');
     this.db.exec(SCHEMA);
+    this.migrate();
+  }
+
+  /**
+   * Idempotent column adds for databases created by an earlier revision.
+   * `CREATE TABLE IF NOT EXISTS` never alters an existing table, so a column
+   * added to SCHEMA after a DB was first created is missing until we add it here.
+   */
+  private migrate(): void {
+    const ensureColumn = (table: string, column: string, decl: string) => {
+      const cols = this.db.pragma(`table_info(${table})`) as Array<{ name: string }>;
+      if (!cols.some((c) => c.name === column)) {
+        this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`);
+      }
+    };
+    ensureColumn('release_candidate', 'target_deploy_at', 'TEXT');
   }
 
   private now(): string {
@@ -283,6 +302,12 @@ export class Store {
     }));
   }
 
+  /** The most recent committed go / no-go outcome, or undefined if Gate 1 has not run. */
+  latestReleaseDecision(candidateId: string): ReleaseDecision | undefined {
+    const all = this.listReleaseDecisions(candidateId);
+    return all[all.length - 1];
+  }
+
   /** Persist a computed RiskScore (the Code Mode aggregation output), before Gate 1. */
   saveRiskScore(input: { candidate_id: string; score: unknown; computed_by: string }): void {
     this.requireCandidate(input.candidate_id);
@@ -304,7 +329,7 @@ export class Store {
     candidate_id: string;
     channel: string;
     content: string;
-    status: 'draft' | 'ready_to_send' | 'sent';
+    status: CommsDraftStatus;
   }): void {
     this.saveCommsDrafts({
       candidate_id: input.candidate_id,
@@ -316,7 +341,7 @@ export class Store {
   /** Persist every channel draft for one Gate 2 handoff in a single transaction. */
   saveCommsDrafts(input: {
     candidate_id: string;
-    status: 'draft' | 'ready_to_send' | 'sent';
+    status: CommsDraftStatus;
     drafts: Array<{ channel: string; content: string }>;
   }): void {
     this.requireCandidate(input.candidate_id);

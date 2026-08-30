@@ -3,14 +3,27 @@ import { Composio } from '@composio/core';
 /**
  * Real Gmail send for send_comms (Gate 2). Composio SDK, called by slug, no LLM.
  *
- * If COMPOSIO_API_KEY is unset the send falls back to the local mock so the demo
- * still works offline — send_comms reports which path it took.
+ * If COMPOSIO_API_KEY is unset there is no real delivery path. A local mock is
+ * only used when GUARDIAN_ALLOW_MOCK_SEND=1 is set explicitly (offline demos);
+ * otherwise sendGmail throws so send_comms surfaces an unsent/error state rather
+ * than recording a fabricated delivery as "sent".
  */
 
 const API_KEY = process.env.COMPOSIO_API_KEY;
 const USER_ID = process.env.COMPOSIO_USER_ID ?? 'default';
+const ALLOW_MOCK_SEND = process.env.GUARDIAN_ALLOW_MOCK_SEND === '1';
 
 export const gmailEnabled = Boolean(API_KEY);
+
+/** Thrown when no real Gmail path is configured and mock sending was not opted into. */
+export class GmailNotConfiguredError extends Error {
+  constructor() {
+    super(
+      'Gmail is not configured (COMPOSIO_API_KEY unset). Set it to send for real, or set GUARDIAN_ALLOW_MOCK_SEND=1 for an offline mock send.',
+    );
+    this.name = 'GmailNotConfiguredError';
+  }
+}
 
 let client: Composio | null = null;
 
@@ -22,6 +35,7 @@ export interface GmailSendResult {
 
 export async function sendGmail(to: string, subject: string, body: string): Promise<GmailSendResult> {
   if (!API_KEY) {
+    if (!ALLOW_MOCK_SEND) throw new GmailNotConfiguredError();
     return { mode: 'mock', delivery_ref: `<${rid()}@release-guardian.local>` };
   }
   client ??= new Composio({ apiKey: API_KEY });

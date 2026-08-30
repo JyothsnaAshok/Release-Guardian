@@ -4,7 +4,7 @@
   "version": "0.2.0",
   "description": "An agent that decides whether a release is safe to ship — built on TrueForge for the WeMakeDevs Agent Harness hackathon.",
   "type": "module",
-  "engines": { "node": ">=22.14.0" },
+  "engines": { "node": ">=22.22.3" },
   "workspaces": ["packages/*"],
   "scripts": {
     "guardian:dev": "npm --workspace packages/guardian-actions run dev",
