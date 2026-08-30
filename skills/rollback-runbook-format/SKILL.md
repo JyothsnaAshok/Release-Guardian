@@ -28,29 +28,26 @@ substituting the clone URL and candidate ref you were given. Do not improvise th
 steps — run it exactly, once:
 
 ```bash
-set -o pipefail
 CLONE_URL="https://github.com/<owner>/<repo>.git"; REF="<candidate-ref>"
 rm -rf /work
-if ! GIT_TERMINAL_PROMPT=0 git clone --depth 50 "$CLONE_URL" /work 2>&1; then
-  echo "__RG__ migration_reversible=unknown  (clone failed)"; exit 0
-fi
-cd /work && git checkout -q "$REF" 2>&1 || { echo "__RG__ migration_reversible=unknown  (checkout failed)"; exit 0; }
-if ls migrations/*_up.sql >/dev/null 2>&1; then
-  npm ci --silent 2>&1 | tail -3
-  OUT=$(node scripts/migrate.mjs verify-rollback /tmp/rb.sqlite 2>&1); RC=$?
+GIT_TERMINAL_PROMPT=0 git clone --depth 30 "$CLONE_URL" /work 2>&1 \
+  && cd /work && git checkout -q "$REF" 2>&1 \
+  || { echo "__RG__ unknown (clone/checkout failed)"; exit 0; }
+if [ -f scripts/migrate.mjs ]; then
+  OUT=$(node scripts/migrate.mjs verify-rollback 2>&1); RC=$?
 elif [ -f scripts/verify-rollback.mjs ]; then
-  npm ci --omit=dev --silent 2>&1 | tail -3 || true
-  OUT=$(npm run --silent verify-rollback 2>&1); RC=$?
+  OUT=$(node scripts/verify-rollback.mjs 2>&1); RC=$?
 else
-  echo "__RG__ migration_reversible=unknown  (no verify-rollback in repo)"; exit 0
+  echo "__RG__ unknown (no verify-rollback script)"; exit 0
 fi
-echo "$OUT" | tail -40
-[ $RC -eq 0 ] && echo "__RG__ migration_reversible=true" || echo "__RG__ migration_reversible=false"
+echo "$OUT" | tail -25
+[ $RC -eq 0 ] && echo "__RG__ true" || echo "__RG__ false"
 ```
 
-Read the `__RG__` marker line for the verdict, and use everything above it (the last
-40 lines of real output) as `dry_run_output`. On `false`, pull the failing migration
-name / reason from that output into `failing_migration`.
+Both demo repos are zero-dependency — no `npm install` step. Read the `__RG__` marker
+for the verdict (`true` / `false` / `unknown`), and the ~25 lines above it are
+`dry_run_output`. On `false`, lift the failing migration name / reason into
+`failing_migration`.
 
 You MUST run this — do not assume an outcome and do not hand-analyse the diff
 instead. `save_check_result` rejects a boolean `migration_reversible` without a
