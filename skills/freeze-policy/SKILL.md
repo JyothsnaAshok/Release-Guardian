@@ -14,18 +14,24 @@ The candidate carries a `target_deploy_at` (an ISO instant) or `null` for "ship 
 Let `T` = `target_deploy_at` if set, else now. The **deploy window** is `[T, T + 2h]`.
 Every overlap check below is against this window — not "right now".
 
-## Tools (the `mock-connectors` server)
+## Tools
 
-- `calendar_list_events` — call with `time_min` = `T`, `time_max` = `T + 2h`.
-- `pagerduty_list_incidents` — active incidents.
-- `pagerduty_list_oncalls` — for the `oncall` field.
+- `calendar_list_events` (the **`composio`** server — real Google Calendar) — call with
+  `time_min` = `T`, `time_max` = `T + 2h`. The result is the raw Composio payload; the
+  events are under `result.items` (or `result.events`), each with `summary`, `start`,
+  `end`. A freeze is any event whose `summary` starts with `FREEZE:`.
+- `pagerduty_list_incidents` (the **`pagerduty`** server) — active incidents.
+- `pagerduty_list_oncalls` (the **`pagerduty`** server) — for the `oncall` field.
+
+If the `composio` calendar call errors or returns no usable payload, set `in_freeze`
+to `"unknown"` and list it in `unknown_fields` — never fall back to `false`.
 
 ## Rules
 
 A release is **in freeze** if any of these is true:
 
-1. **Calendar freeze** — an all-day event on the `Release Freezes` calendar whose
-   `summary` starts with `FREEZE:` overlaps the deploy window.
+1. **Calendar freeze** — a Google Calendar event whose `summary` starts with
+   `FREEZE:` overlaps the deploy window.
 2. **Incident freeze** — only when the deploy window includes now: `pagerduty_list_incidents`
    returns any incident with `urgency: "high"` and `status` not `resolved`. (A future
    deploy is not blocked by an incident that may be resolved by then — but note it in

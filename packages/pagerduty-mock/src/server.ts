@@ -2,53 +2,29 @@ import express from 'express';
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { SCENARIO, calendarEvents, oncalls, incidents } from './fixtures.js';
+import { SCENARIO, oncalls, incidents } from './fixtures.js';
 
 /**
- * mock-connectors — stand-ins for Google Calendar and PagerDuty while the real
- * OAuth connectors aren't wired (PRD §18: mock behind the same MCP interface,
+ * pagerduty-mock — stand-in for PagerDuty (incidents + on-call) while the real
+ * OAuth connector isn't wired (PRD §18: mock behind the same MCP interface,
  * disclose in the README). All tools are read-only.
  *
- * Swap for the real servers by changing the connector config; the agent and the
- * freeze-policy skill don't change.
+ * Calendar is no longer mocked — the Freeze Check reads a real Google Calendar
+ * through composio-bridge. Swap this for a real PagerDuty MCP by changing the
+ * connector config; the agent and the freeze-policy skill don't change.
  */
 
-const PORT = Number(process.env.MOCK_PORT ?? 9200);
+const PORT = Number(process.env.PAGERDUTY_PORT ?? 9200);
 // Loopback by default, like guardian-actions — this server is unauthenticated.
-// Override with MOCK_HOST=0.0.0.0 only where a non-local bind is actually needed.
-const HOST = process.env.MOCK_HOST ?? '127.0.0.1';
+const HOST = process.env.PAGERDUTY_HOST ?? '127.0.0.1';
 const ok = (data: unknown) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
 });
 
 function buildServer(): McpServer {
   const server = new McpServer(
-    { name: 'mock-connectors', version: '0.2.0' },
+    { name: 'pagerduty', version: '0.2.0' },
     { capabilities: { tools: {} } },
-  );
-
-  server.registerTool(
-    'calendar_list_events',
-    {
-      title: 'List calendar events in a window',
-      description:
-        'Google-Calendar-shaped events.list. Freeze windows are all-day events on the "Release Freezes" calendar whose summary starts with "FREEZE:".',
-      inputSchema: {
-        time_min: z.string().describe('ISO-8601 lower bound').optional(),
-        time_max: z.string().describe('ISO-8601 upper bound').optional(),
-      },
-      annotations: { readOnlyHint: true },
-    },
-    async ({ time_min, time_max }) => {
-      const lo = time_min ? Date.parse(time_min) : -Infinity;
-      const hi = time_max ? Date.parse(time_max) : Infinity;
-      const within = (e: ReturnType<typeof calendarEvents>[number]) => {
-        const s = Date.parse(e.start.dateTime ?? `${e.start.date}T00:00:00Z`);
-        const en = Date.parse(e.end.dateTime ?? `${e.end.date}T00:00:00Z`);
-        return en >= lo && s <= hi;
-      };
-      return ok({ scenario: SCENARIO, events: calendarEvents().filter(within) });
-    },
   );
 
   server.registerTool(
@@ -88,7 +64,7 @@ function buildServer(): McpServer {
 
 const app = express();
 app.use(express.json());
-app.get('/healthz', (_req, res) => res.json({ ok: true, service: 'mock-connectors', scenario: SCENARIO }));
+app.get('/healthz', (_req, res) => res.json({ ok: true, service: 'pagerduty-mock', scenario: SCENARIO }));
 
 app.post('/mcp', async (req, res) => {
   const server = buildServer();
@@ -102,5 +78,5 @@ app.post('/mcp', async (req, res) => {
 });
 
 app.listen(PORT, HOST, () => {
-  console.log(`mock-connectors MCP on http://${HOST}:${PORT}/mcp  (scenario: ${SCENARIO})`);
+  console.log(`pagerduty-mock MCP on http://${HOST}:${PORT}/mcp  (scenario: ${SCENARIO})`);
 });

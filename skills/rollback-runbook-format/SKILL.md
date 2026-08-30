@@ -29,6 +29,7 @@ steps — run it exactly, once:
 
 ```bash
 CLONE_URL="https://github.com/<owner>/<repo>.git"; REF="<candidate-ref>"
+command -v node >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq nodejs >/dev/null 2>&1; }
 rm -rf /work
 GIT_TERMINAL_PROMPT=0 git clone --depth 30 "$CLONE_URL" /work 2>&1 \
   && cd /work && git checkout -q "$REF" 2>&1 \
@@ -91,7 +92,14 @@ statement; feature-flag names + safe defaults; the on-call escalation path.
 }
 ```
 
+Send **exactly these six keys and no others**. Common mistakes to avoid:
+`prior_artifact` is wrong — the key is `prior_artifact_exists`. There is no
+`runbook_last_exercised` key — that fact goes into your `runbook_current` boolean.
+Do not add, drop, or rename a key. Every boolean key is `true`, `false`, or the
+string `"unknown"` — never a word like `"yes"`, a number, or an object.
+
 All six fields required. Use `"unknown"` (never `false`) for any check whose lookup
 or dry-run could not run, and name it in `unknown_fields`. `failing_migration` is
-`null` when `migration_reversible` is `true`; `dry_run_output` is `null` only when
-`migration_reversible` is `"unknown"`.
+`null` when `migration_reversible` is `true` (include the key with value `null` —
+do not omit it); `dry_run_output` is `null` only when `migration_reversible` is
+`"unknown"`.

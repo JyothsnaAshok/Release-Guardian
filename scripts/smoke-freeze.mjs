@@ -1,13 +1,16 @@
-// PR2 smoke test: run the Freeze Check end to end against the mock connectors and
-// assert it (a) detects the seeded freeze and (b) persists a schema-valid result.
+// PR2 smoke test: run the Freeze Check end to end against the real Google Calendar
+// (composio :9300) + the PagerDuty mock (:9200), and assert it persists a
+// schema-valid result. Set PAGERDUTY_SCENARIO=incident to assert an incident freeze.
 //
-// Prereqs: TrueForge running, guardian-actions (:9100) and mock-connectors (:9200)
-// running and registered (npm run setup:providers), a working model in MODEL env.
+// Prereqs: TrueForge running, guardian-actions (:9100), pagerduty (:9200) and
+// composio (:9300) running and registered (npm run setup:providers), COMPOSIO_API_KEY
+// set, a working model in RELEASE_GUARDIAN_MODEL. For a calendar-freeze assertion,
+// put a "FREEZE: ..." event on the linked calendar covering the next ~2h.
 //
 // The freeze-policy rules are inlined here rather than loaded as a registered skill,
 // so the test doesn't depend on Settings -> Skills. The real agent uses the skill.
 //
-// Usage: MOCK_SCENARIO=freeze node --env-file=.env scripts/smoke-freeze.mjs
+// Usage: PAGERDUTY_SCENARIO=incident node --env-file=.env scripts/smoke-freeze.mjs
 
 import { TrueForge } from '@truefoundry/trueforge-sdk';
 
@@ -20,13 +23,12 @@ const instructions = `You are running the Freeze Check for release candidate "${
 
 Steps, in order:
 1. Call guardian-actions.get_release_candidate with candidate_id "${candidateId}" and ref "main".
-2. Call mock-connectors.calendar_list_events with time_min = now, time_max = now + 2h.
-3. Call mock-connectors.pagerduty_list_incidents.
-4. Call mock-connectors.pagerduty_list_oncalls.
+2. Call composio.calendar_list_events with time_min = now, time_max = now + 2h.
+3. Call pagerduty.pagerduty_list_incidents.
+4. Call pagerduty.pagerduty_list_oncalls.
 5. Decide in_freeze:
-   - true if an all-day event on the "Release Freezes" calendar whose summary starts with
-     "FREEZE:" overlaps the next 60 minutes, OR any incident has urgency "high" and status
-     not "resolved".
+   - true if a calendar event whose summary starts with "FREEZE:" overlaps the next
+     2 hours, OR any incident has urgency "high" and status not "resolved".
    - false otherwise.
    - "unknown" for a field only if its lookup errored — never false on error.
 6. Call guardian-actions.save_check_result with kind "freeze" and result:
@@ -41,7 +43,8 @@ const { data: session } = await client.sessions.create({
       model: { name: model },
       instructions,
       mcp_servers: [
-        { name: 'mock-connectors', enable_tools: ['@read-only'] },
+        { name: 'pagerduty', enable_tools: ['@read-only'] },
+        { name: 'composio', enable_tools: ['@read-only'] },
         {
           name: 'guardian-actions',
           enable_tools: ['@all'],
@@ -69,13 +72,14 @@ const saved = toolCalls.find((c) => c.includes('"saved"'));
 console.log('\nsave_check_result response:', saved ?? '(none)');
 console.log('\nagent reply:\n', reply.trim());
 
-const scenario = (process.env.MOCK_SCENARIO ?? 'freeze').toLowerCase();
-const expectFreeze = scenario === 'freeze' || scenario === 'incident';
+const scenario = (process.env.PAGERDUTY_SCENARIO ?? 'clear').toLowerCase();
 const persisted = Boolean(saved?.includes('"saved": true'));
 const gotFreeze = Boolean(saved?.includes('"in_freeze": true')) || reply.includes('"in_freeze": true');
-const pass = persisted && gotFreeze === expectFreeze;
+// We can always assert the result persisted schema-valid. in_freeze depends on live
+// calendar state, so only assert it when the incident scenario forces it true.
+const pass = persisted && (scenario !== 'incident' || gotFreeze);
 
 console.log(
-  `\n${pass ? 'PASS' : 'FAIL'} — scenario "${scenario}": persisted=${persisted}, in_freeze=${gotFreeze}, expected=${expectFreeze}`,
+  `\n${pass ? 'PASS' : 'FAIL'} — scenario "${scenario}": persisted=${persisted}, in_freeze=${gotFreeze}`,
 );
 process.exit(pass ? 0 : 1);

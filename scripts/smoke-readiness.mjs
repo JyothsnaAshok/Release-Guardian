@@ -2,13 +2,13 @@
 // connectors + the mock incident tracker, and assert the PERSISTED result (not the
 // model's prose) reflects the demo repo's true state.
 //
-// Prereqs: TrueForge running; guardian-actions (:9100) and mock-connectors (:9200)
+// Prereqs: TrueForge running; guardian-actions (:9100) and pagerduty (:9200)
 // running and registered; github + github-actions connectors registered
 // (GITHUB_PAT set, npm run setup:providers); a working model in RELEASE_GUARDIAN_MODEL.
 //
 // Target: JyothsnaAshok/orders-service, candidate release/v1.3.0 vs base tag v1.2.0.
 // Expected true state: CI green, one migration touched (0003_drop_status_column),
-// no unresolved high-urgency incident (MOCK_SCENARIO=clear).
+// no unresolved high-urgency incident (PAGERDUTY_SCENARIO=clear).
 //
 // Usage: node --env-file=.env scripts/smoke-readiness.mjs
 
@@ -42,7 +42,7 @@ Steps, in order:
    sha). github-actions.actions_list workflow runs for that head SHA. tests_pass is true iff
    every run with status "completed" concluded "success"; "unknown" if any run is not completed
    or no runs are found; false if any completed run concluded other than "success".
-5. open_incidents: mock-connectors.pagerduty_list_incidents. An incident with urgency "high"
+5. open_incidents: pagerduty.pagerduty_list_incidents. An incident with urgency "high"
    and status not "resolved" is open — list "PD-<id>: <title>" for each. [] if the lookup
    succeeded and none match; null only if the lookup itself errored.
 6. guardian-actions.save_check_result, kind "readiness", result:
@@ -60,7 +60,7 @@ const { data: session } = await client.sessions.create({
       mcp_servers: [
         { name: 'github', enable_tools: ['@read-only'] },
         { name: 'github-actions', enable_tools: ['@read-only'] },
-        { name: 'mock-connectors', enable_tools: ['@read-only'] },
+        { name: 'pagerduty', enable_tools: ['@read-only'] },
         {
           name: 'guardian-actions',
           enable_tools: ['@all'],

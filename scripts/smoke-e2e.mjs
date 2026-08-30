@@ -33,7 +33,7 @@ Repo name: orders-service
 Clone URL: https://github.com/JyothsnaAshok/orders-service.git
 Candidate ref: release/v1.3.0
 Last release tag: v1.2.0
-The incident tracker and calendar are the mock-connectors server.`;
+Incidents and on-call are the pagerduty server; the calendar is the composio server.`;
 
 let pausedAtGate1 = false;
 let pending = null; // { threadId, toolCallId }

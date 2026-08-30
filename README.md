@@ -45,7 +45,8 @@ sit in the collapsed **Agent Steps** panel.
 ```
 agents/release-guardian.json    Agent spec, applied to TrueForge via the SDK
 packages/guardian-actions/      Custom MCP server: the two approval gates + app store
-packages/mock-connectors/       Mock Calendar + PagerDuty (freeze windows, on-call, incidents)
+packages/composio-bridge/       Real Google Calendar + Gmail via the Composio SDK (local MCP)
+packages/pagerduty-mock/        Mock PagerDuty (on-call, incidents)
 scripts/apply-agent.mjs         Create/update the agent on a running server
 scripts/setup-providers.mjs     Configure model providers / Daytona / MCP servers via the SDK
 scripts/smoke-{freeze,readiness,rollback}.mjs   Per-check end-to-end smoke tests
@@ -71,17 +72,21 @@ The GitHub connector is registered as two MCP servers (`github` for repo/commit/
 reads, `github-actions` for CI status — GitHub's remote MCP splits the actions toolset
 onto its own endpoint). Both use one fine-grained read-only PAT (`GITHUB_PAT`).
 
-## Mock connectors
+## Connectors
 
-`packages/mock-connectors` stands in for Google Calendar + PagerDuty until the real
-OAuth servers are wired (they mirror the real API shapes, so swapping is a connector
-config change, not an agent change). `MOCK_SCENARIO` selects the world:
+**Calendar + Gmail are real.** `packages/composio-bridge` wraps the Composio SDK and
+exposes `calendar_list_events` (Google Calendar `events.list`) on a local MCP; the
+real Gmail send lives inside `guardian-actions` `send_comms`. Needs `COMPOSIO_API_KEY`
++ `COMPOSIO_USER_ID`. A freeze is any calendar event whose title starts with `FREEZE:`.
+
+**PagerDuty is still mocked.** `packages/pagerduty-mock` mirrors the real API shapes,
+so swapping in a real PagerDuty MCP is a connector-config change, not an agent change.
+`PAGERDUTY_SCENARIO` selects the world:
 
 | Scenario | Meaning |
 | --- | --- |
-| `clear` | no freeze window, no blocking incident |
-| `freeze` | an active `FREEZE:` calendar window |
-| `incident` | a triggered high-urgency PagerDuty incident |
+| `clear` | one auto-resolved incident — nothing blocking (default) |
+| `incident` | a triggered high-urgency incident |
 
 ## Quick start
 
@@ -91,7 +96,8 @@ npm install
 
 npx @truefoundry/trueforge@latest   # terminal 1 — TrueForge on :8790
 npm run guardian:dev                # terminal 2 — guardian-actions MCP on :9100
-npm run mocks:dev                   # terminal 3 — mock-connectors MCP on :9200
+npm run pagerduty:dev              # terminal 3 — pagerduty-mock MCP on :9200
+npm run composio:dev               # terminal 4 — composio-bridge MCP on :9300 (real Calendar; needs COMPOSIO_API_KEY)
 
 npm run setup:providers            # model provider + Daytona + all MCP servers + skills, via the SDK
 npm run agent:apply                # create/update the "release-guardian" agent
