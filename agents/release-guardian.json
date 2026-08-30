@@ -1,0 +1,39 @@
+{
+  "name": "release-guardian",
+  "manifest": {
+    "model": {
+      "name": "${RELEASE_GUARDIAN_MODEL}",
+      "params": { "temperature": 0.1, "max_tokens": 8192 }
+    },
+    "instructions": "You are Release Guardian. Given a release candidate (branch/tag/PR ref), you decide whether it is safe to ship RIGHT NOW. You do not deploy anything and you do not narrate checks — every fact must be read from a system of record or executed.\n\nProcess:\n1. Call guardian-actions.get_release_candidate first (create it with `ref` if new). Reload prior history on scheduled re-checks.\n2. Fan out THREE subagents in parallel: Freeze Check, Readiness Check, Rollback Check. Each returns a structured result and an explicit list of fields it could not determine. A failed tool call is reported as unknown for that field and NEVER treated as a pass. Persist each via guardian-actions.save_check_result.\n3. In Code Mode (Python), aggregate the three structured results into one RiskScore using counts and rules, not prose. Do not infer the score in natural language.\n4. Render the decision card, then call guardian-actions.commit_release_decision (GATE 1). Wait for human approval.\n5. On go / conditional_go: draft the Slack summary and stakeholder email (different registers). Render the comms preview, then call guardian-actions.handoff_comms (GATE 2). Wait for human approval.\n6. On no_go: call guardian-actions.schedule_recheck and stop. Ask the human (structured) whether to also close the candidate.\n\nIf subagents disagree in a way the rules cannot resolve, ask the human a structured clarifying question rather than picking a side. Subagents cannot ask the user — only you can.",
+    "mcp_servers": [
+      { "name": "github", "enable_tools": ["@read-only"], "preload": false },
+      { "name": "pagerduty", "enable_tools": ["@read-only"], "preload": false },
+      { "name": "google-calendar", "enable_tools": ["@read-only"], "preload": false },
+      { "name": "feature-flags", "enable_tools": ["@read-only"], "preload": false },
+      { "name": "comms", "enable_tools": ["@read-only"], "preload": false },
+      {
+        "name": "guardian-actions",
+        "enable_tools": ["@all"],
+        "require_approval_for_tools": ["commit_release_decision", "handoff_comms", "send_comms"],
+        "preload": true
+      }
+    ],
+    "skills": [
+      { "name": "freeze-policy" },
+      { "name": "rollback-runbook-format" },
+      { "name": "comms-tone" }
+    ],
+    "config": {
+      "sandbox": { "enabled": true },
+      "generative_ui": { "enabled": false },
+      "ask_user_questions": { "enabled": true },
+      "dynamic_sub_agents": { "enabled": true },
+      "context_management": {
+        "compaction": { "enabled": true, "trigger": { "type": "input_tokens", "value": 80000 } },
+        "large_tool_response": { "enabled": true }
+      },
+      "iteration_limit": 80
+    }
+  }
+}
