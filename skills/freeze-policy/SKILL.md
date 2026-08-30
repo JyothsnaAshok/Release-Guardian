@@ -14,25 +14,18 @@ The candidate carries a `target_deploy_at` (an ISO instant) or `null` for "ship 
 Let `T` = `target_deploy_at` if set, else now. The **deploy window** is `[T, T + 2h]`.
 Every overlap check below is against this window — not "right now".
 
-## Tools
+## Tools (the `mock-connectors` server)
 
-Use whichever connectors are attached — do not assume tool names, discover them:
-
-- **Calendar** — a list-events tool (`calendar_list_events` on the mock connector,
-  `list_events` on a real Google Calendar connector). Call it with `time_min` = `T`
-  and `time_max` = `T + 2h`. If a `list_calendars` tool exists, prefer the calendar
-  named "Release Freezes"; otherwise scan all events in the window.
-- **Incidents** — a list-incidents tool (`pagerduty_list_incidents` on the mock, or
-  the real PagerDuty MCP's incidents tool).
-- **On-call** — a list-oncalls tool for the `oncall` field.
+- `calendar_list_events` — call with `time_min` = `T`, `time_max` = `T + 2h`.
+- `pagerduty_list_incidents` — active incidents.
+- `pagerduty_list_oncalls` — for the `oncall` field.
 
 ## Rules
 
 A release is **in freeze** if any of these is true:
 
-1. **Calendar freeze** — an all-day event (any calendar; a "Release Freezes"
-   calendar if one exists) whose `summary` / `title` starts with `FREEZE:` overlaps
-   the deploy window.
+1. **Calendar freeze** — an all-day event on the `Release Freezes` calendar whose
+   `summary` starts with `FREEZE:` overlaps the deploy window.
 2. **Incident freeze** — only when the deploy window includes now: `pagerduty_list_incidents`
    returns any incident with `urgency: "high"` and `status` not `resolved`. (A future
    deploy is not blocked by an incident that may be resolved by then — but note it in
