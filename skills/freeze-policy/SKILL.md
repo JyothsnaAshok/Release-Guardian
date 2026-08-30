@@ -5,25 +5,32 @@ description: Org/team blackout rules, incident freezes, and concurrent-deploy co
 
 # Freeze Policy
 
-You are running the **Freeze Check**. Decide whether the org is currently in a state
-that blocks the release. Read every fact from a tool — never assume.
+You are running the **Freeze Check**. Decide whether the release is blocked by a
+freeze *for its planned deploy time*. Read every fact from a tool — never assume.
+
+## The deploy window
+
+The candidate carries a `target_deploy_at` (an ISO instant) or `null` for "ship now".
+Let `T` = `target_deploy_at` if set, else now. The **deploy window** is `[T, T + 2h]`.
+Every overlap check below is against this window — not "right now".
 
 ## Tools
 
-- `calendar_list_events` — freeze windows live here.
-- `pagerduty_list_oncalls` — who is on call now.
+- `calendar_list_events` — freeze windows live here. Call it with `time_min` = `T`
+  and `time_max` = `T + 2h`.
 - `pagerduty_list_incidents` — active incidents.
-
-Call `calendar_list_events` with `time_min` = now and `time_max` = now + 2h.
+- `pagerduty_list_oncalls` — who is on call.
 
 ## Rules
 
 A release is **in freeze** if any of these is true:
 
 1. **Calendar freeze** — an all-day event on the `Release Freezes` calendar whose
-   `summary` starts with `FREEZE:` overlaps the next 60 minutes.
-2. **Incident freeze** — `pagerduty_list_incidents` returns any incident with
-   `urgency: "high"` and `status` of `triggered` or `acknowledged` (i.e. not resolved).
+   `summary` starts with `FREEZE:` overlaps the deploy window.
+2. **Incident freeze** — only when the deploy window includes now: `pagerduty_list_incidents`
+   returns any incident with `urgency: "high"` and `status` not `resolved`. (A future
+   deploy is not blocked by an incident that may be resolved by then — but note it in
+   `reasons` as a watch item if `in_freeze` is otherwise false.)
 
 Blackout windows (weekends, holidays) are expressed as `FREEZE:` calendar events by
 whoever owns the release calendar — they are covered by rule 1, so do not apply a
@@ -32,8 +39,8 @@ separate day-of-week rule here.
 ## Concurrent-deploy conflict
 
 Report (do not auto-resolve) any other `FREEZE:`-adjacent or deploy-window event that
-overlaps the next 60 minutes. There is no separate deploy registry in this environment,
-so this is calendar-only for now.
+overlaps the deploy window. There is no separate deploy registry here, so this is
+calendar-only for now.
 
 ## Output — call `guardian-actions.save_check_result`
 
@@ -42,12 +49,16 @@ so this is calendar-only for now.
 ```json
 {
   "in_freeze": true,
-  "reasons": ["calendar_freeze: FREEZE: production incident retro — no deploys (ends 2026-09-02)"],
+  "reasons": ["calendar_freeze: FREEZE: production incident retro — no deploys (2026-08-29 to 2026-09-02), overlaps deploy window 2026-08-31T18:00Z"],
   "window": { "start": "2026-08-29", "end": "2026-09-02" },
   "conflicting_deploys": [],
   "oncall": { "name": "Dana Ruiz", "email": "dana.ruiz@demo.dev" }
 }
 ```
+
+- Whenever `target_deploy_at` was set, put "evaluated for <that date>" in the first
+  `reasons` entry (even when `in_freeze` is `false`, so the operator sees which date
+  was checked).
 
 - Every field above is **required** — always send all five. There are no defaults; an
   omitted field is rejected.

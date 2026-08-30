@@ -16,6 +16,9 @@ export interface ReleaseCandidate {
   id: string;
   ref: string;
   submitted_at: string;
+  /** ISO-8601 planned deploy instant. `null` means "ship now" — the Freeze Check
+   *  then evaluates the calendar for the current window instead of a future one. */
+  target_deploy_at: string | null;
   status: 'evaluating' | 'blocked' | 'approved' | 'shipped' | 'cancelled';
 }
 
@@ -59,10 +62,11 @@ export class UnknownCandidateError extends Error {
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS release_candidate (
-  id            TEXT PRIMARY KEY,
-  ref           TEXT NOT NULL,
-  submitted_at  TEXT NOT NULL,
-  status        TEXT NOT NULL
+  id               TEXT PRIMARY KEY,
+  ref              TEXT NOT NULL,
+  submitted_at     TEXT NOT NULL,
+  target_deploy_at TEXT,
+  status           TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS check_result (
   candidate_id   TEXT NOT NULL REFERENCES release_candidate(id),
@@ -130,13 +134,21 @@ export class Store {
     return existing;
   }
 
-  upsertCandidate(id: string, ref: string): ReleaseCandidate {
+  upsertCandidate(id: string, ref: string, targetDeployAt?: string | null): ReleaseCandidate {
     const existing = this.getCandidate(id);
     if (existing) return existing;
-    const row: ReleaseCandidate = { id, ref, submitted_at: this.now(), status: 'evaluating' };
+    const row: ReleaseCandidate = {
+      id,
+      ref,
+      submitted_at: this.now(),
+      target_deploy_at: targetDeployAt ?? null,
+      status: 'evaluating',
+    };
     this.db
-      .prepare('INSERT INTO release_candidate (id, ref, submitted_at, status) VALUES (?, ?, ?, ?)')
-      .run(row.id, row.ref, row.submitted_at, row.status);
+      .prepare(
+        'INSERT INTO release_candidate (id, ref, submitted_at, target_deploy_at, status) VALUES (?, ?, ?, ?, ?)',
+      )
+      .run(row.id, row.ref, row.submitted_at, row.target_deploy_at, row.status);
     return row;
   }
 

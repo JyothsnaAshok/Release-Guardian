@@ -62,13 +62,20 @@ function buildServer(): McpServer {
           .string()
           .optional()
           .describe('Branch/tag/PR ref. Required the first time a candidate is seen.'),
+        target_deploy_at: z
+          .string()
+          .nullable()
+          .optional()
+          .describe(
+            'ISO-8601 planned deploy instant, or null for "ship now". The Freeze Check evaluates the calendar for this window. Set on first creation.',
+          ),
       },
       annotations: { readOnlyHint: true },
     },
-    async ({ candidate_id, ref }) => {
+    async ({ candidate_id, ref, target_deploy_at }) => {
       if (!store.getCandidate(candidate_id)) {
         if (!ref) return ok({ error: 'unknown candidate; pass `ref` to create it' });
-        store.upsertCandidate(candidate_id, ref);
+        store.upsertCandidate(candidate_id, ref, target_deploy_at ?? null);
       }
       return ok(store.loadFullHistory(candidate_id));
     },
