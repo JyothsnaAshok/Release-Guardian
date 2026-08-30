@@ -29,16 +29,17 @@ Given a release candidate (branch / tag / PR ref), Release Guardian:
 4. **Gate 1** — renders the decision as a **Generative UI** card, then asks the human
    (approve / override to go / conditional-go / no-go / cancel). Fires on every
    decision, including `no_go`.
-5. On go / conditional-go: drafts the release comms (Slack summary + stakeholder
-   email, different registers) as a Generative UI preview card.
-6. **Gate 2** — asks again before both drafts are handed off to send, under one
-   approval.
+5. On go / conditional-go: drafts **one internal release email** (engineering /
+   on-call audience — technical, carries the full rollback plan) as a Generative UI
+   preview card.
+6. **Gate 2** — asks again before the email goes out. On approval it is **sent for
+   real over Gmail**.
 7. On no_go: schedules a nightly re-check; each trigger is a fresh session that
    reloads the candidate from the store and re-surfaces it once unblocked.
 
 The UI is TrueForge's own chat UI (`localhost:8790`) — the agent is tuned so its
-visible output is just the two cards; the tool calls, sandbox runs and Code Mode
-sit in the collapsed **Agent Steps** panel.
+visible output is just the two cards (decision + email); the tool calls, sandbox
+runs and Code Mode sit in the collapsed **Agent Steps** panel.
 
 ## Layout
 
@@ -62,7 +63,7 @@ The agent analyses real GitHub repos, not fixtures:
 | Repo | Case | Candidate branch |
 | --- | --- | --- |
 | [`orders-service`](https://github.com/JyothsnaAshok/orders-service) `release/v1.3.0` | SQL migration — `0003` drops a column with live data and cannot be faithfully reversed → **NO-GO** | vs tag `v1.2.0` |
-| [`orders-service`](https://github.com/JyothsnaAshok/orders-service) `release/v1.4.0` | Clean release — reversible migration + a current rollback runbook → **GO**, drafts comms, Gate 2 | vs tag `v1.2.0` |
+| [`orders-service`](https://github.com/JyothsnaAshok/orders-service) `release/v1.4.0` | Clean release — reversible migration + a current rollback runbook → **GO**, drafts the release email, Gate 2 | vs tag `v1.2.0` |
 | [`checkout-api`](https://github.com/JyothsnaAshok/checkout-api) `release/v2.1.0` | Pure code — persisted-state format moves to `v2`; the upgrade is safe and CI is green, but a rollback strands the service → **NO-GO** | vs tag `v2.0.0` |
 
 CI is green on all three — a human would ship them. On `v1.3.0` / `v2.1.0` the
@@ -74,10 +75,13 @@ onto its own endpoint). Both use one fine-grained read-only PAT (`GITHUB_PAT`).
 
 ## Connectors
 
-**Calendar + Gmail are real.** `packages/composio-bridge` wraps the Composio SDK and
-exposes `calendar_list_events` (Google Calendar `events.list`) on a local MCP; the
-real Gmail send lives inside `guardian-actions` `send_comms`. Needs `COMPOSIO_API_KEY`
-+ `COMPOSIO_USER_ID`. A freeze is any calendar event whose title starts with `FREEZE:`.
+**Calendar + Gmail are real, via Composio.** `packages/composio-bridge` wraps the
+Composio SDK and exposes `calendar_list_events` (Google Calendar `events.list`) on a
+local MCP for the Freeze Check; the real Gmail send lives inside `guardian-actions`
+`send_comms` and fires on Gate 2 approval. Link a Google account in the Composio
+dashboard, then set `COMPOSIO_API_KEY` + `COMPOSIO_USER_ID` (see `.env.example`). A
+freeze is any calendar event whose title starts with `FREEZE:`. Without
+`COMPOSIO_API_KEY`, `send_comms` falls back to a mock send.
 
 **PagerDuty is still mocked.** `packages/pagerduty-mock` mirrors the real API shapes,
 so swapping in a real PagerDuty MCP is a connector-config change, not an agent change.
@@ -91,33 +95,35 @@ so swapping in a real PagerDuty MCP is a connector-config change, not an agent c
 ## Quick start
 
 ```bash
-cp .env.example .env            # fill in MODEL_API_KEY, DAYTONA_API_KEY, GITHUB_PAT
+cp .env.example .env      # MODEL_API_KEY, DAYTONA_API_KEY, GITHUB_PAT, COMPOSIO_API_KEY, COMPOSIO_USER_ID
 npm install
 
 npx @truefoundry/trueforge@latest   # terminal 1 — TrueForge on :8790
 npm run guardian:dev                # terminal 2 — guardian-actions MCP on :9100
-npm run pagerduty:dev              # terminal 3 — pagerduty-mock MCP on :9200
-npm run composio:dev               # terminal 4 — composio-bridge MCP on :9300 (real Calendar; needs COMPOSIO_API_KEY)
+npm run pagerduty:dev               # terminal 3 — pagerduty-mock MCP on :9200
+npm run composio:dev                # terminal 4 — composio-bridge MCP on :9300
 
-npm run setup:providers            # model provider + Daytona + all MCP servers + skills, via the SDK
-npm run agent:apply                # create/update the "release-guardian" agent
+npm run setup:providers             # model provider + Daytona + all MCP servers + skills, via the SDK
+npm run agent:haiku                 # apply the agent on Haiku (cheap); agent:sonnet for the final demo
 ```
 
 Then open TrueForge (`http://localhost:8790`), pick **release-guardian** from the
 Agents Library, and paste a candidate:
 
 ```
-Evaluate release candidate "rc-1042".
-Repo owner: JyothsnaAshok
-Repo name: orders-service
-Clone URL: https://github.com/JyothsnaAshok/orders-service.git
+Evaluate this release candidate.
+
+Repo: https://github.com/JyothsnaAshok/orders-service
 Candidate ref: release/v1.3.0
-Last release tag: v1.2.0
+Previous release: v1.2.0
+Target deploy: 2026-09-15T14:00:00Z
+Candidate id: rc-1301
 ```
 
-`setup:providers` configures everything reachable over the API; the only manual step
-is authorising any real OAuth connector under **Settings → Connectors**. Run
-`npm run smoke:e2e` for a full unattended pipeline check.
+Leave out `Target deploy` (or write `Deploy now`) to evaluate against the current
+freeze window instead. `setup:providers` configures everything reachable over the
+API; the only manual step is linking the Google account in the Composio dashboard.
+Run `npm run smoke:e2e` for a full unattended pipeline check.
 
 > Skills are git-cloned into the sandbox on init, so **`Release-Guardian` must be a
 > public repo** for the Rollback Check's dry-run to run.
