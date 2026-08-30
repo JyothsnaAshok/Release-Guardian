@@ -42,6 +42,7 @@ else
 fi
 echo "$OUT" | tail -25
 [ $RC -eq 0 ] && echo "__RG__ true" || echo "__RG__ false"
+cd / && rm -rf /work    # free the checkout; the sandbox itself auto-stops when the turn ends
 ```
 
 Both demo repos are zero-dependency — no `npm install` step. Read the `__RG__` marker

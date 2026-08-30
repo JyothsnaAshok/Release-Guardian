@@ -130,9 +130,10 @@ if (DAYTONA_API_KEY) {
         type: 'daytona',
         auth: { apiKey: DAYTONA_API_KEY },
         execTimeoutMs: 120000,
-        autoStopIntervalInMinutes: 15,
-        autoArchiveIntervalInMinutes: 10080,
-        autoDeleteIntervalInMinutes: 43200,
+        // Aggressive teardown — a run's sandbox goes idle when the turn ends.
+        autoStopIntervalInMinutes: Number(process.env.DAYTONA_AUTO_STOP_MIN ?? 3),
+        autoArchiveIntervalInMinutes: Number(process.env.DAYTONA_AUTO_ARCHIVE_MIN ?? 15),
+        autoDeleteIntervalInMinutes: Number(process.env.DAYTONA_AUTO_DELETE_MIN ?? 120),
       },
     }),
   );
