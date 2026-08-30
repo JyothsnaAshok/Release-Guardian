@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { Store, UnknownCandidateError } from './store.js';
-import { CHECK_SCHEMAS, HEADLINE_FIELD } from './schemas.js';
+import { CHECK_SCHEMAS, HEADLINE_FIELD, EVIDENCE_FIELDS } from './schemas.js';
 
 /**
  * guardian-actions — the first-party MCP server for Release Guardian (PRD §9.6).
@@ -102,15 +102,21 @@ function buildServer(): McpServer {
       if (value === undefined) {
         return ok({ saved: false, error: `"${headline}" is required (use "unknown" if a lookup failed)` });
       }
-      // Any field the caller left as "unknown" is declared unknown whether or not
-      // they remembered to list it — a failed lookup can never read as determined.
-      const unknownValued = Object.entries(parsed.data as Record<string, unknown>)
+      // A failed lookup can never read as determined, whether or not the caller
+      // remembered to list it: a "unknown" tri-state value, or a null evidence
+      // field (array-or-null, where null means the list lookup failed), is
+      // declared unknown here regardless.
+      const data = parsed.data as Record<string, unknown>;
+      const unknownValued = Object.entries(data)
         .filter(([, v]) => v === 'unknown')
         .map(([k]) => k);
-      const declaredUnknown = [...new Set([...unknown_fields, ...unknownValued])];
+      const nullEvidence = EVIDENCE_FIELDS[kind].filter((k) => data[k] === null);
+      const declaredUnknown = [...new Set([...unknown_fields, ...unknownValued, ...nullEvidence])];
       return guarded(() => {
         store.saveCheckResult({ candidate_id, kind, result: parsed.data, unknown_fields: declaredUnknown });
-        return ok({ saved: true, kind, headline: { [headline]: value }, unknown_fields: declaredUnknown });
+        // Echo the validated, stored result so callers assert against what was
+        // persisted rather than the model's prose.
+        return ok({ saved: true, kind, result: parsed.data, unknown_fields: declaredUnknown });
       });
     },
   );

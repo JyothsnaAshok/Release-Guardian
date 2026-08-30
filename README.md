@@ -38,9 +38,26 @@ packages/mock-connectors/       Mock Calendar + PagerDuty (freeze windows, on-ca
 scripts/apply-agent.mjs         Create/update the agent on a running server
 scripts/setup-providers.mjs     Configure model providers / Daytona / MCP servers via the SDK
 scripts/smoke-freeze.mjs        End-to-end check of the Freeze Check
-fixtures/sample-repo/           Demo repo incl. a deliberately-irreversible migration
+scripts/smoke-readiness.mjs     End-to-end check of the Readiness Check
+fixtures/sample-repo/           Seed for the demo repos (see below)
 ui/                             Custom UI on the TrueForge UI SDK (level 2)
 ```
+
+## Demo repos (the release candidates under test)
+
+The agent analyses real GitHub repos, not fixtures:
+
+| Repo | Case | Candidate branch |
+| --- | --- | --- |
+| [`orders-service`](https://github.com/JyothsnaAshok/orders-service) | SQL migration — `0003` drops a column with live data and cannot be faithfully reversed | `release/v1.3.0` vs tag `v1.2.0` |
+| [`checkout-api`](https://github.com/JyothsnaAshok/checkout-api) | Pure code — persisted-state format moves to `v2`; the upgrade is safe and CI is green, but a rollback strands the service | `release/v2.1.0` vs tag `v2.0.0` |
+
+CI is green on both — a human would ship them. The Rollback Check is what catches that
+they can't be undone.
+
+The GitHub connector is registered as two MCP servers (`github` for repo/commit/PR
+reads, `github-actions` for CI status — GitHub's remote MCP splits the actions toolset
+onto its own endpoint). Both use one fine-grained read-only PAT (`GITHUB_PAT`).
 
 ## Mock connectors
 

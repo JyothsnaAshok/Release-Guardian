@@ -33,6 +33,8 @@ export const ReadinessCheckResult = z
     tests_pass: tri,
     open_incidents: evidence,
     has_migration: tri,
+    /** Migration file paths the release touches — consumed by the Rollback Check. */
+    migrations: evidence,
     diff_summary: z.string().nullable(),
   })
   .strict();
@@ -60,4 +62,17 @@ export const HEADLINE_FIELD: Record<CheckKind, string> = {
   freeze: 'in_freeze',
   readiness: 'tests_pass',
   rollback: 'migration_reversible',
+};
+
+/**
+ * "Evidence" fields are the array-or-null lists (built with `evidence` above): a
+ * `null` means the lookup that would populate the list failed, so at save time a
+ * null evidence field is auto-declared in `unknown_fields` (PRD §7.1). Object- and
+ * string-valued nullables (`window`, `oncall`, `failing_migration`, `diff_summary`)
+ * are determined-absent when null and are NOT auto-declared.
+ */
+export const EVIDENCE_FIELDS: Record<CheckKind, readonly string[]> = {
+  freeze: ['reasons', 'conflicting_deploys'],
+  readiness: ['open_incidents', 'migrations'],
+  rollback: [],
 };
