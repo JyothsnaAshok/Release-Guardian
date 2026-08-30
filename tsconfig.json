@@ -1,4 +1,7 @@
 {
   "files": [],
-  "references": [{ "path": "packages/guardian-actions" }]
+  "references": [
+    { "path": "packages/guardian-actions" },
+    { "path": "packages/mock-connectors" }
+  ]
 }

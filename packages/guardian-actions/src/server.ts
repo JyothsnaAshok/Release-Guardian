@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { Store, UnknownCandidateError } from './store.js';
+import { CHECK_SCHEMAS, HEADLINE_FIELD } from './schemas.js';
 
 /**
  * guardian-actions — the first-party MCP server for Release Guardian (PRD §9.6).
@@ -87,11 +88,31 @@ function buildServer(): McpServer {
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     },
-    async ({ candidate_id, kind, result, unknown_fields }) =>
-      guarded(() => {
-        store.saveCheckResult({ candidate_id, kind, result, unknown_fields });
-        return ok({ saved: true, kind, unknown_fields });
-      }),
+    async ({ candidate_id, kind, result, unknown_fields }) => {
+      const parsed = CHECK_SCHEMAS[kind].safeParse(result);
+      if (!parsed.success) {
+        return ok({
+          saved: false,
+          error: `result does not match the ${kind} schema — fix and retry`,
+          issues: parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`),
+        });
+      }
+      const headline = HEADLINE_FIELD[kind];
+      const value = (parsed.data as Record<string, unknown>)[headline];
+      if (value === undefined) {
+        return ok({ saved: false, error: `"${headline}" is required (use "unknown" if a lookup failed)` });
+      }
+      // Any field the caller left as "unknown" is declared unknown whether or not
+      // they remembered to list it — a failed lookup can never read as determined.
+      const unknownValued = Object.entries(parsed.data as Record<string, unknown>)
+        .filter(([, v]) => v === 'unknown')
+        .map(([k]) => k);
+      const declaredUnknown = [...new Set([...unknown_fields, ...unknownValued])];
+      return guarded(() => {
+        store.saveCheckResult({ candidate_id, kind, result: parsed.data, unknown_fields: declaredUnknown });
+        return ok({ saved: true, kind, headline: { [headline]: value }, unknown_fields: declaredUnknown });
+      });
+    },
   );
 
   server.registerTool(

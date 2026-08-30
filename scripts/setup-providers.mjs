@@ -23,6 +23,7 @@ const {
   MODEL_MAX_OUTPUT = '64000',
   DAYTONA_API_KEY,
   GUARDIAN_MCP_URL = 'http://localhost:9100/mcp',
+  MOCK_MCP_URL = 'http://localhost:9200/mcp',
 
   // Optional extra OpenAI-compatible "custom" provider (e.g. Cerebras).
   CUSTOM_PROVIDER_NAME = 'cerebras',
@@ -32,7 +33,17 @@ const {
   CUSTOM_MODEL_UPSTREAM_ID = 'llama-3.3-70b',
   CUSTOM_MODEL_CONTEXT_LENGTH = '128000',
   CUSTOM_MODEL_MAX_OUTPUT = '32000',
+
+  // Skills are git-backed: registered from a repo URL + ref + path, not a local dir.
+  SKILLS_REPO_URL = 'https://github.com/JyothsnaAshok/Release-Guardian',
+  SKILLS_REPO_REF = 'main',
 } = process.env;
+
+const SKILLS = [
+  { name: 'freeze-policy', path: 'skills/freeze-policy', description: 'Freeze rules (calendar / incident / weekend) and the freeze-check output contract.' },
+  { name: 'rollback-runbook-format', path: 'skills/rollback-runbook-format', description: 'What a valid rollback runbook contains and how the rollback dry-run is judged.' },
+  { name: 'comms-tone', path: 'skills/comms-tone', description: 'Registers and templates for the internal Slack summary vs. the stakeholder email.' },
+];
 
 const failures = [];
 
@@ -133,6 +144,32 @@ await step(`mcp server "guardian-actions" -> ${GUARDIAN_MCP_URL}`, () =>
   }),
 );
 
+await step(`mcp server "mock-connectors" -> ${MOCK_MCP_URL}`, () =>
+  client.settings.mcpServers.createOrUpdate({
+    manifest: {
+      type: 'remote',
+      name: 'mock-connectors',
+      url: MOCK_MCP_URL,
+      description: 'Mock Calendar + PagerDuty connectors (freeze windows, on-call, incidents) while the real OAuth servers are not wired.',
+    },
+  }),
+);
+
+for (const skill of SKILLS) {
+  await step(`skill "${skill.name}" <- ${SKILLS_REPO_URL}@${SKILLS_REPO_REF}/${skill.path}`, () =>
+    client.settings.skills.createOrUpdate({
+      manifest: {
+        type: 'git',
+        name: skill.name,
+        url: SKILLS_REPO_URL,
+        ref: SKILLS_REPO_REF,
+        path: skill.path,
+        description: skill.description,
+      },
+    }),
+  );
+}
+
 if (failures.length > 0) {
   console.error(`\nFAILED: ${failures.length} step(s) did not complete:`);
   for (const label of failures) console.error(`  - ${label}`);
@@ -140,5 +177,5 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log('\ndone. OAuth connectors (GitHub, PagerDuty, Google Calendar) must still be');
-console.log('added in Settings -> Connectors — they need an interactive auth flow.');
+console.log('\ndone. Real OAuth connectors (GitHub, PagerDuty, Google Calendar) can replace');
+console.log('the mocks later via Settings -> Connectors — the agent config does not change.');

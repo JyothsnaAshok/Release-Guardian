@@ -9,3 +9,8 @@ dist/
 *.sqlite-journal
 data/
 .DS_Store
+
+# local planning docs — kept out of the repo
+docs/PR0-readiness.md
+NOTES.md
+release-guardian-prd.md
